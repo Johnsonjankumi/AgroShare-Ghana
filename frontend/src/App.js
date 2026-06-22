@@ -110,16 +110,20 @@ function App() {
       return null;
     }
   });
-  const [district, setDistrict] = useState('Sunyani West');
-  const [form, setForm] = useState({ name: '', phone: '', district: 'Sunyani West' });
-  const [equipmentForm, setEquipmentForm] = useState({ owner_name: '', type: '', district: 'Sunyani West', price_per_day: '', description: '' });
-  const [bookingForm, setBookingForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Sunyani West' });
-  const [poolForm, setPoolForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Sunyani West' });
+  const [district, setDistrict] = useState('Greater Accra');
+  const [form, setForm] = useState({ name: '', phone: '', district: 'Greater Accra' });
+  const [equipmentForm, setEquipmentForm] = useState({ owner_name: '', type: '', district: 'Greater Accra', price_per_day: '', description: '' });
+  const [bookingForm, setBookingForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
+  const [poolForm, setPoolForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [paymentForm, setPaymentForm] = useState({ booking_id: '', mobile_number: '', method: 'paystack' });
   const [ussdForm, setUssdForm] = useState({ session_id: localStorage.getItem('ussdSession') || '', phone_number: '', input_text: '' });
-  const [message, setMessage] = useState('');
+  const [notice, setNotice] = useState(null);
 
   const t = key => translations[lang][key] || key;
+
+  const showNotice = (type, text) => {
+    setNotice({ type, text });
+  };
 
   useEffect(() => {
     fetch(`${API_BASE}/farmers/`).then(res => res.json()).then(setFarmers);
@@ -147,12 +151,12 @@ function App() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setMessage(data.detail || data.error || 'Failed to register farmer.');
+      showNotice('error', data.detail || data.error || 'Failed to register farmer.');
       return;
     }
     setFarmers([...farmers, data]);
     setForm({ name: '', phone: '', district });
-    setMessage('Farmer registered successfully.');
+    showNotice('success', 'Farmer registered successfully.');
   };
 
   const submitEquipment = async e => {
@@ -163,8 +167,13 @@ function App() {
       body: JSON.stringify({ ...equipmentForm, price_per_day: Number(equipmentForm.price_per_day) }),
     });
     const data = await res.json();
+    if (!res.ok) {
+      showNotice('error', data.detail || data.error || 'Failed to add equipment listing.');
+      return;
+    }
     setEquipment([...equipment, data]);
     setEquipmentForm({ owner_name: '', type: '', district, price_per_day: '', description: '' });
+    showNotice('success', 'Equipment listing added successfully.');
   };
 
   const submitBooking = async e => {
@@ -175,7 +184,11 @@ function App() {
       body: JSON.stringify(bookingForm),
     });
     const data = await res.json();
-    alert(`${t('createBooking')} ID ${data.id}`);
+    if (!res.ok) {
+      showNotice('error', data.detail || data.error || 'Failed to create booking.');
+      return;
+    }
+    showNotice('success', `${t('createBooking')} ID ${data.id}`);
   };
 
   const submitPool = async e => {
@@ -186,6 +199,10 @@ function App() {
       body: JSON.stringify(poolForm),
     });
     const data = await res.json();
+    if (!res.ok) {
+      showNotice('error', data.detail || data.error || 'Failed to create pool.');
+      return;
+    }
     const exists = rentalPools.find(pool => pool.id === data.id);
     if (exists) {
       setRentalPools(rentalPools.map(pool => (pool.id === data.id ? data : pool)));
@@ -193,6 +210,7 @@ function App() {
       setRentalPools([...rentalPools, data]);
     }
     setPoolForm({ farmer_id: '', equipment_id: '', rental_date: '', district });
+    showNotice('success', 'Rental pool created successfully.');
   };
 
   const submitPayment = async e => {
@@ -204,11 +222,12 @@ function App() {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.detail || data.error || 'Unable to create payment. Check the booking ID and try again.');
+      showNotice('error', data.detail || data.error || 'Unable to create payment. Check the booking ID and try again.');
       return;
     }
     setPayments([...payments, data]);
     setPaymentForm({ booking_id: '', mobile_number: '', method: 'paystack' });
+    showNotice('success', 'Payment created successfully.');
   };
 
   const releasePayment = async paymentId => {
@@ -216,7 +235,12 @@ function App() {
       method: 'POST',
     });
     const updated = await res.json();
+    if (!res.ok) {
+      showNotice('error', updated.detail || updated.error || 'Unable to complete payment release.');
+      return;
+    }
     setPayments(payments.map(payment => (payment.id === updated.id ? updated : payment)));
+    showNotice('success', 'Payment completed successfully.');
   };
 
   const sendUssd = async e => {
@@ -231,6 +255,7 @@ function App() {
     localStorage.setItem('ussdResponse', JSON.stringify(data));
     setUssdResponse(data);
     setUssdForm({ ...ussdForm, session_id: data.session_id });
+    showNotice('success', 'USSD request sent successfully.');
   };
 
   return (
@@ -241,7 +266,12 @@ function App() {
         maxWidth: 960,
         margin: '0 auto',
         minHeight: '100vh',
-        background: 'rgba(255, 255, 255, 0.88)',
+        backgroundImage: `linear-gradient(rgba(14, 40, 18, 0.35), rgba(14, 40, 18, 0.35)), url(${process.env.PUBLIC_URL}/farm-background.jpg)`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+        backgroundColor: 'rgba(255, 255, 255, 0.88)',
       }}
     >
       <header>
@@ -263,13 +293,40 @@ function App() {
       </header>
 
       <section style={{ marginBottom: 24 }}>
+        {notice && (
+          <div
+            style={{
+              marginBottom: 18,
+              padding: 14,
+              borderRadius: 10,
+              border: notice.type === 'success' ? '1px solid #b8e5c8' : '1px solid #f2b8b5',
+              background: notice.type === 'success' ? '#e6ffed' : '#ffecec',
+              color: notice.type === 'success' ? '#1a6a30' : '#8c1d18',
+              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.06)',
+            }}
+          >
+            {notice.text}
+          </div>
+        )}
         <label>
           {t('districtFilter')}:
           <select value={district} onChange={e => setDistrict(e.target.value)} style={{ marginLeft: 8 }}>
-            <option>Sunyani West</option>
-            <option>Ga West</option>
+            <option>Ahafo</option>
+            <option>Ashanti</option>
+            <option>Bono</option>
+            <option>Bono East</option>
+            <option>Central</option>
+            <option>Eastern</option>
+            <option>Greater Accra</option>
+            <option>North East</option>
             <option>Northern</option>
+            <option>Oti</option>
+            <option>Savanna</option>
+            <option>Upper East</option>
+            <option>Upper West</option>
             <option>Volta</option>
+            <option>Western</option>
+            <option>Western North</option>
           </select>
         </label>
         <button onClick={loadDistrict} style={{ marginLeft: 12 }}>{t('loadEquipment')}</button>
@@ -284,11 +341,6 @@ function App() {
             <label>{t('district')}<br /><input value={form.district} onChange={e => setForm({ ...form, district: e.target.value })} required /></label>
             <button type="submit">{t('registerFarmer')}</button>
           </form>
-          {message && (
-            <div style={{ marginTop: 12, padding: 12, background: '#e6ffed', border: '1px solid #b8e5c8', borderRadius: 8, color: '#1a6a30' }}>
-              {message}
-            </div>
-          )}
         </div>
 
         <div style={{ padding: 18, border: '1px solid #ddd', borderRadius: 10 }}>
