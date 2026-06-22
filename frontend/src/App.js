@@ -33,6 +33,7 @@ const translations = {
     mobileNumber: 'Mobile number',
     paystack: 'Paystack',
     mobileMoney: 'Mobile Money',
+    creditCard: 'Credit Card',
     paymentStatus: 'Payment status',
     ussdTitle: 'USSD interface',
     ussdPhone: 'Phone number',
@@ -79,6 +80,7 @@ const translations = {
     mobileNumber: 'Mɔbil nɔma',
     paystack: 'Paystack',
     mobileMoney: 'Mobile Money',
+    creditCard: 'Credit Card',
     paymentStatus: 'Sika status',
     ussdTitle: 'USSD interface',
     ussdPhone: 'Fɔn nɔma',
@@ -417,10 +419,11 @@ function App() {
           <form onSubmit={submitPayment} style={{ display: 'grid', gap: 12 }}>
             <label>{t('farmerId')}<br /><input value={paymentForm.booking_id} onChange={e => setPaymentForm({ ...paymentForm, booking_id: Number(e.target.value) })} required /></label>
             <label>{t('mobileNumber')}<br /><input value={paymentForm.mobile_number} onChange={e => setPaymentForm({ ...paymentForm, mobile_number: e.target.value })} required /></label>
-            <label>{t('mobileMoney')} / {t('paystack')}<br />
+            <label>{t('mobileMoney')} / {t('paystack')} / {t('creditCard')}<br />
               <select value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}>
                 <option value="paystack">Paystack</option>
                 <option value="mobile_money">Mobile Money</option>
+                <option value="credit_card">Credit Card</option>
               </select>
             </label>
             <button type="submit">{t('payNow')}</button>
