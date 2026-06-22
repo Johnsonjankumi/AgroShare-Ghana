@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker
 import os
 from datetime import datetime
 
@@ -53,13 +53,13 @@ class Farmer(Base):
 class Equipment(Base):
     __tablename__ = "equipment"
     id = Column(Integer, primary_key=True, index=True)
+    owner_name = Column(String, index=True)
+    type = Column(String)
     category = Column(String, nullable=True, index=True)  # tractor, plow, pump, etc.
     district = Column(String, index=True)
     price_per_day = Column(Float)
     description = Column(String)
-    photo_url = Column(String, nullable=True)  # URL to equipment photodex=True)
-    price_per_day = Column(Float)
-    description = Column(String)
+    photo_url = Column(String, nullable=True)  # URL to equipment photo
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Booking(Base):
@@ -91,6 +91,9 @@ class Payment(Base):
     mobile_number = Column(String)
     reference = Column(String, unique=True, index=True)
     status = Column(String, default="held")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Rating(Base):
     __tablename__ = "ratings"
     id = Column(Integer, primary_key=True, index=True)
@@ -100,6 +103,17 @@ class Rating(Base):
     review = Column(Text)  # written review
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, index=True)
+    plan = Column(String, index=True)  # monthly or yearly
+    amount = Column(Float)
+    currency = Column(String, default="GHS")
+    mobile_number = Column(String)
+    reference = Column(String, unique=True, index=True)
+    status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # Create tables

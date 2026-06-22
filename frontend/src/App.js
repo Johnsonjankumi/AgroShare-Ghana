@@ -70,6 +70,11 @@ const translations = {
     yearly: 'Yearly',
     save: 'Save 17%',
     subscribe: 'Subscribe now',
+    subscriptionFarmerId: 'Farmer ID for subscription',
+    ownerActivity: 'Owner activity feed',
+    noActivity: 'No activity yet.',
+    subscriptions: 'Subscriptions',
+    paymentEvents: 'Payments',
     mapTitle: 'Farmer Locations Map',
     mapSubtitle: 'See where registered farmers are located across Ghana.',
     useMyLocation: 'Use my location',
@@ -137,6 +142,11 @@ const translations = {
     yearly: 'Afe biara',
     save: 'Gye 17%',
     subscribe: 'Bɔ ho',
+    subscriptionFarmerId: 'Afuwfo ID ma subscription',
+    ownerActivity: 'Wura adwuma amanneɛbɔ',
+    noActivity: 'Amanneɛbɔ biara nni hɔ.',
+    subscriptions: 'Subscriptions',
+    paymentEvents: 'Payments',
     mapTitle: 'Afuwfoɔ Beae Map',
     mapSubtitle: 'Hwɛ beae a afuwfoɔ wɔ Ghana nyinaa mu.',
     useMyLocation: 'Fa me beae',
@@ -151,6 +161,8 @@ function App() {
   const [equipment, setEquipment] = useState([]);
   const [rentalPools, setRentalPools] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [ownerActivity, setOwnerActivity] = useState([]);
   const [ussdResponse, setUssdResponse] = useState(() => {
     try { return JSON.parse(localStorage.getItem('ussdResponse')); } catch { return null; }
   });
@@ -160,6 +172,7 @@ function App() {
   const [bookingForm, setBookingForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [poolForm, setPoolForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [paymentForm, setPaymentForm] = useState({ booking_id: '', mobile_number: '', method: 'paystack' });
+  const [subscriptionForm, setSubscriptionForm] = useState({ farmer_id: '', mobile_number: '' });
   const [ussdForm, setUssdForm] = useState({ session_id: localStorage.getItem('ussdSession') || '', phone_number: '', input_text: '' });
   const [notice, setNotice] = useState(null);
   const [ratings, setRatings] = useState([]);
@@ -185,7 +198,14 @@ function App() {
     fetch(`${API_BASE}/equipment/`).then(r => r.json()).then(setEquipment).catch(() => {});
     fetch(`${API_BASE}/pools/`).then(r => r.json()).then(setRentalPools).catch(() => {});
     fetch(`${API_BASE}/payments/`).then(r => r.json()).then(setPayments).catch(() => {});
+    fetch(`${API_BASE}/subscriptions/`).then(r => r.json()).then(setSubscriptions).catch(() => {});
+    fetch(`${API_BASE}/subscriptions/owner/activity`).then(r => r.json()).then(setOwnerActivity).catch(() => {});
   }, []);
+
+  const refreshOwnerActivity = () => {
+    fetch(`${API_BASE}/subscriptions/`).then(r => r.json()).then(setSubscriptions).catch(() => {});
+    fetch(`${API_BASE}/subscriptions/owner/activity`).then(r => r.json()).then(setOwnerActivity).catch(() => {});
+  };
 
   // Initialize Leaflet map
   useEffect(() => {
@@ -289,7 +309,35 @@ function App() {
     if (!res.ok) { showNotice('error', data.detail || 'Unable to create payment. Check the booking ID and try again.'); return; }
     setPayments(p => [...p, data]);
     setPaymentForm({ booking_id: '', mobile_number: '', method: 'paystack' });
+    refreshOwnerActivity();
     showNotice('success', `✅ Payment of GHS ${Number(data.amount).toFixed(2)} created! Reference: ${data.reference}`);
+  };
+
+  const submitSubscription = async plan => {
+    if (!subscriptionForm.farmer_id || !subscriptionForm.mobile_number) {
+      showNotice('error', 'Enter Farmer ID and mobile number before subscribing.');
+      return;
+    }
+
+    const res = await fetch(`${API_BASE}/subscriptions/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        farmer_id: Number(subscriptionForm.farmer_id),
+        mobile_number: subscriptionForm.mobile_number,
+        plan,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showNotice('error', data.detail || 'Failed to create subscription.');
+      return;
+    }
+
+    setSubscriptions(s => [data, ...s]);
+    refreshOwnerActivity();
+    showNotice('success', `✅ ${plan} subscription paid. Reference: ${data.reference}`);
   };
 
   const releasePayment = async paymentId => {
@@ -297,6 +345,7 @@ function App() {
     const updated = await res.json();
     if (!res.ok) { showNotice('error', updated.detail || 'Unable to release payment.'); return; }
     setPayments(p => p.map(x => x.id === updated.id ? updated : x));
+    refreshOwnerActivity();
     showNotice('success', '✅ Payment completed and released successfully!');
   };
 
@@ -402,6 +451,23 @@ function App() {
       <section style={{ marginBottom: 14, borderRadius: 14, padding: 16, background: 'rgba(255,255,255,0.97)', border: '1px solid #ddd' }}>
         <h2 style={{ marginTop: 0, textAlign: 'center', fontSize: '1.1rem' }}>💼 {t('pricingTitle')}</h2>
         <p style={{ textAlign: 'center', color: '#555', marginTop: 0, fontSize: '0.9rem' }}>{t('pricingSubtitle')}</p>
+        <div style={{ maxWidth: 560, margin: '0 auto 12px auto' }}>
+          <label>{t('subscriptionFarmerId')}<br />
+            <input
+              type="number"
+              value={subscriptionForm.farmer_id}
+              onChange={e => setSubscriptionForm(f => ({ ...f, farmer_id: e.target.value }))}
+              placeholder="e.g. 1"
+            />
+          </label>
+          <label>{t('mobileNumber')}<br />
+            <input
+              value={subscriptionForm.mobile_number}
+              onChange={e => setSubscriptionForm(f => ({ ...f, mobile_number: e.target.value }))}
+              placeholder="e.g. 0241234567"
+            />
+          </label>
+        </div>
         <div className="grid-2" style={{ maxWidth: 560, margin: '0 auto' }}>
           <div className="pricing-card">
             <div style={{ fontWeight: 700 }}>{t('monthly')}</div>
@@ -413,7 +479,7 @@ function App() {
               <li>Payment processing</li>
               <li>Map visibility</li>
             </ul>
-            <button>{t('subscribe')}</button>
+            <button type="button" onClick={() => submitSubscription('monthly')}>{t('subscribe')}</button>
           </div>
           <div className="pricing-card featured">
             <div style={{ fontWeight: 700 }}>
@@ -427,9 +493,29 @@ function App() {
               <li>Priority support</li>
               <li>Featured listing</li>
             </ul>
-            <button>{t('subscribe')}</button>
+            <button type="button" onClick={() => submitSubscription('yearly')}>{t('subscribe')}</button>
           </div>
         </div>
+      </section>
+
+      <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+        <h2 style={{ marginTop: 0 }}>🔔 {t('ownerActivity')}</h2>
+        <div style={{ fontSize: '0.88rem', color: '#666', marginBottom: 8 }}>
+          {t('subscriptions')}: {subscriptions.length} | {t('paymentEvents')}: {payments.length}
+        </div>
+        {ownerActivity.length > 0 ? ownerActivity.map(item => (
+          <div key={`${item.type}-${item.reference}`} style={{ border: '1px solid #ececec', borderRadius: 8, padding: 10, marginBottom: 8, background: '#fafafa' }}>
+            <div style={{ fontWeight: 700 }}>
+              {item.type === 'subscription' ? 'Subscription' : 'Payment'} | {item.reference}
+            </div>
+            <div style={{ fontSize: '0.86rem' }}>
+              Amount: GHS {Number(item.amount || 0).toFixed(2)} | Status: {item.status}
+            </div>
+            <div style={{ fontSize: '0.82rem', color: '#666' }}>
+              {new Date(item.created_at).toLocaleString()}
+            </div>
+          </div>
+        )) : <div style={{ color: '#777' }}>{t('noActivity')}</div>}
       </section>
 
       {/* ── District Filter ── */}
