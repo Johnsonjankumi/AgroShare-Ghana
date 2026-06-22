@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import os
-from app.routers import farmers, equipment, bookings, pools, payments, ussd, auth
+from app.routers import farmers, equipment, bookings, pools, payments, ussd, auth, ratings
 
 
 def load_cors_origins() -> list[str]:
@@ -40,4 +41,9 @@ app.include_router(equipment.router, prefix="/api/equipment", tags=["Equipment"]
 app.include_router(bookings.router, prefix="/api/bookings", tags=["Bookings"])
 app.include_router(pools.router, prefix="/api/pools", tags=["Rental Pools"])
 app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
+app.include_router(ratings.router, prefix="/api/ratings", tags=["Ratings"])
 app.include_router(ussd.router, prefix="/api/ussd", tags=["USSD"])
+
+# Mount static files for uploaded equipment photos
+if os.path.exists("uploads"):
+    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")

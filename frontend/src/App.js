@@ -54,6 +54,20 @@ const translations = {
     ready: 'Ready',
     pending: 'Pending',
     complete: 'Complete',
+    equipmentCategory: 'Equipment category',
+    uploadPhoto: 'Upload photo',
+    farmerRating: 'Farmer rating',
+    ratings: 'Ratings & Reviews',
+    submitRating: 'Submit rating',
+    yourRating: 'Your rating (1-5 stars)',
+    yourReview: 'Your review',
+    locationBasedSearch: 'Location-based search',
+    latitude: 'Latitude',
+    longitude: 'Longitude',
+    distance: 'Distance (km)',
+    searchRadius: 'Search radius',
+    noRatings: 'No ratings yet.',
+    avgeRating: 'Average rating',
   },
   twi: {
     title: 'AgroShare Ghana',
@@ -106,6 +120,20 @@ const translations = {
     ready: 'Wɔpɛ',
     pending: 'Wɔretwɛn',
     complete: 'Wie',
+    equipmentCategory: 'Akode no din',
+    uploadPhoto: 'Fa sini no so',
+    farmerRating: 'Afuwfoɔ dɔm',
+    ratings: 'Dɔm ne Nkyerɛmu',
+    submitRating: 'Tu dɔm no',
+    yourRating: 'Wʼakɔmmɔ (1-5 stars)',
+    yourReview: 'Wʼakɔmmɔ nsɛm',
+    locationBasedSearch: 'Beae dodow search',
+    latitude: 'Latitude',
+    longitude: 'Longitude',
+    distance: 'Distance (km)',
+    searchRadius: 'Search radius',
+    noRatings: 'Dɔm biara nni hɔ.',
+    avgeRating: 'Dɔm kossan',
   },
 };
 
@@ -130,6 +158,10 @@ function App() {
   const [paymentForm, setPaymentForm] = useState({ booking_id: '', mobile_number: '', method: 'paystack' });
   const [ussdForm, setUssdForm] = useState({ session_id: localStorage.getItem('ussdSession') || '', phone_number: '', input_text: '' });
   const [notice, setNotice] = useState(null);
+  const [ratings, setRatings] = useState([]);
+  const [ratingForm, setRatingForm] = useState({ farmer_id: '', rater_name: '', rating: 5, review: '' });
+  const [photoFile, setPhotoFile] = useState(null);
+  const [searchRadius, setSearchRadius] = useState(10);
 
   const t = key => translations[lang][key] || key;
 
@@ -270,6 +302,52 @@ function App() {
     showNotice('success', 'USSD request sent successfully.');
   };
 
+  const uploadEquipmentPhoto = async (equipmentId) => {
+    if (!photoFile) {
+      showNotice('error', 'Please select a photo first.');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', photoFile);
+    
+    const res = await fetch(`${API_BASE}/equipment/upload/${equipmentId}`, {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showNotice('error', data.detail || 'Failed to upload photo.');
+      return;
+    }
+    setPhotoFile(null);
+    showNotice('success', 'Photo uploaded successfully.');
+    // Refresh equipment list
+    fetch(`${API_BASE}/equipment/`).then(res => res.json()).then(setEquipment);
+  };
+
+  const submitRating = async e => {
+    e.preventDefault();
+    const res = await fetch(`${API_BASE}/ratings/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...ratingForm, rating: Number(ratingForm.rating) }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showNotice('error', data.detail || 'Failed to submit rating.');
+      return;
+    }
+    setRatings([...ratings, data]);
+    setRatingForm({ farmer_id: '', rater_name: '', rating: 5, review: '' });
+    showNotice('success', 'Rating submitted successfully.');
+  };
+
+  const fetchFarmerRatings = async (farmerId) => {
+    const res = await fetch(`${API_BASE}/ratings/farmer/${farmerId}`);
+    const data = await res.json();
+    setRatings(data);
+  };
+
   return (
     <div
       style={{
@@ -370,6 +448,16 @@ function App() {
           <form onSubmit={submitEquipment}>
             <label>{t('ownerName')}<br /><input value={equipmentForm.owner_name} onChange={e => setEquipmentForm({ ...equipmentForm, owner_name: e.target.value })} required /></label>
             <label>{t('equipmentType')}<br /><input value={equipmentForm.type} onChange={e => setEquipmentForm({ ...equipmentForm, type: e.target.value })} required /></label>
+            <label>{t('equipmentCategory')}<br />
+              <select value={equipmentForm.category || 'other'} onChange={e => setEquipmentForm({ ...equipmentForm, category: e.target.value })}>
+                <option value="tractor">Tractor</option>
+                <option value="plow">Plow</option>
+                <option value="pump">Pump</option>
+                <option value="harvester">Harvester</option>
+                <option value="sprayer">Sprayer</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
             <label>{t('district')}<br /><input value={equipmentForm.district} onChange={e => setEquipmentForm({ ...equipmentForm, district: e.target.value })} required /></label>
             <label>{t('pricePerDay')}<br /><input type="number" value={equipmentForm.price_per_day} onChange={e => setEquipmentForm({ ...equipmentForm, price_per_day: e.target.value })} required /></label>
             <label>{t('description')}<br /><textarea value={equipmentForm.description} onChange={e => setEquipmentForm({ ...equipmentForm, description: e.target.value })} /></label>
@@ -384,10 +472,17 @@ function App() {
           <div style={{ display: 'grid', gap: 16 }}>
             {equipment.length > 0 ? equipment.map(item => (
               <div key={item.id} style={{ padding: 18, border: '1px solid #ddd', borderRadius: 10 }}>
-                <strong>{item.type}</strong> — {item.district}
+                {item.photo_url && (
+                  <img src={item.photo_url} alt={item.type} style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8, marginBottom: 12 }} />
+                )}
+                <strong>{item.type}</strong> {item.category && `(${item.category})`} — {item.district}
                 <div>{t('ownerName')}: {item.owner_name}</div>
                 <div>GHS {Number(item.price_per_day ?? 0).toFixed(2)} / day</div>
                 <div>{item.description}</div>
+                <div style={{ marginTop: 12 }}>
+                  <label>{t('uploadPhoto')}: <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} /></label>
+                  {photoFile && <button type="button" onClick={() => uploadEquipmentPhoto(item.id)} style={{ marginLeft: 8 }}>{t('uploadPhoto')}</button>}
+                </div>
               </div>
             )) : <div>{t('noEquipment')}</div>}
           </div>
@@ -464,7 +559,30 @@ function App() {
       </section>
 
       <section style={{ marginTop: 24, padding: 18, border: '1px solid #ddd', borderRadius: 10 }}>
-        <h2>{t('ussdTitle')}</h2>
+        <h2>{t('ratings')}</h2>
+        <form onSubmit={submitRating} style={{ display: 'grid', gap: 12, marginBottom: 24, maxWidth: 520 }}>
+          <label>{t('farmerId')}<br /><input type="number" value={ratingForm.farmer_id} onChange={e => { setRatingForm({ ...ratingForm, farmer_id: Number(e.target.value) }); fetchFarmerRatings(Number(e.target.value)); }} required /></label>
+          <label>{t('farmerName')}<br /><input value={ratingForm.rater_name} onChange={e => setRatingForm({ ...ratingForm, rater_name: e.target.value })} required /></label>
+          <label>{t('yourRating')}<br /><select value={ratingForm.rating} onChange={e => setRatingForm({ ...ratingForm, rating: Number(e.target.value) })}>
+            <option value="1">⭐ 1 - Poor</option>
+            <option value="2">⭐⭐ 2 - Fair</option>
+            <option value="3">⭐⭐⭐ 3 - Good</option>
+            <option value="4">⭐⭐⭐⭐ 4 - Very Good</option>
+            <option value="5">⭐⭐⭐⭐⭐ 5 - Excellent</option>
+          </select></label>
+          <label>{t('yourReview')}<br /><textarea value={ratingForm.review} onChange={e => setRatingForm({ ...ratingForm, review: e.target.value })} required /></label>
+          <button type="submit">{t('submitRating')}</button>
+        </form>
+        <div>
+          <h3>Reviews for Farmer</h3>
+          {ratings.length > 0 ? ratings.map(rating => (
+            <div key={rating.id} style={{ padding: 12, marginBottom: 12, border: '1px solid #ddd', borderRadius: 10, background: '#fafafa' }}>
+              <div><strong>{rating.rater_name}</strong> - {'⭐'.repeat(rating.rating)}</div>
+              <div>{rating.review}</div>
+            </div>
+          )) : <div>{t('noRatings')}</div>}
+        </div>
+      </section>
         <form onSubmit={sendUssd} style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
           <label>{t('ussdSession')}<br /><input value={ussdForm.session_id} onChange={e => setUssdForm({ ...ussdForm, session_id: e.target.value })} placeholder="optional" /></label>
           <label>{t('ussdPhone')}<br /><input value={ussdForm.phone_number} onChange={e => setUssdForm({ ...ussdForm, phone_number: e.target.value })} required /></label>

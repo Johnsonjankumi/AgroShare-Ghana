@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import os
@@ -45,15 +45,19 @@ class Farmer(Base):
     name = Column(String, index=True)
     phone = Column(String, unique=True, index=True)
     district = Column(String, index=True)
+    latitude = Column(Float, nullable=True)  # GPS location
+    longitude = Column(Float, nullable=True)  # GPS location
     created_at = Column(DateTime, default=datetime.utcnow)
     password = Column(String)  # Hashed password
 
 class Equipment(Base):
     __tablename__ = "equipment"
     id = Column(Integer, primary_key=True, index=True)
-    owner_name = Column(String, index=True)
-    type = Column(String)
+    category = Column(String, nullable=True, index=True)  # tractor, plow, pump, etc.
     district = Column(String, index=True)
+    price_per_day = Column(Float)
+    description = Column(String)
+    photo_url = Column(String, nullable=True)  # URL to equipment photodex=True)
     price_per_day = Column(Float)
     description = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -87,6 +91,15 @@ class Payment(Base):
     mobile_number = Column(String)
     reference = Column(String, unique=True, index=True)
     status = Column(String, default="held")
+class Rating(Base):
+    __tablename__ = "ratings"
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, index=True)  # farmer being rated
+    rater_name = Column(String)  # farmer giving the rating
+    rating = Column(Integer)  # 1-5 stars
+    review = Column(Text)  # written review
+    created_at = Column(DateTime, default=datetime.utcnow)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # Create tables

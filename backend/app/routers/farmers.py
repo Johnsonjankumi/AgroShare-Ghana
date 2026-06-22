@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.database import get_db, Farmer as FarmerModel
 from app.auth import hash_password
@@ -12,6 +12,8 @@ class FarmerCreate(BaseModel):
     name: str
     phone: str
     district: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     password: str = Field(..., min_length=6, description="Minimum 6 characters")
 
 class Farmer(BaseModel):
@@ -19,6 +21,8 @@ class Farmer(BaseModel):
     name: str
     phone: str
     district: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
     class Config:
         from_attributes = True
