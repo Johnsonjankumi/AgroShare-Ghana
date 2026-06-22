@@ -10,6 +10,12 @@ def load_database_url() -> str:
     database_url = os.getenv("DATABASE_URL")
 
     if database_url:
+        # Render provides a PostgreSQL URL without an explicit driver.
+        # Force psycopg3 so SQLAlchemy does not default to psycopg2.
+        if database_url.startswith("postgresql://"):
+            return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+        if database_url.startswith("postgres://"):
+            return database_url.replace("postgres://", "postgresql+psycopg://", 1)
         return database_url
 
     if environment == "development":
