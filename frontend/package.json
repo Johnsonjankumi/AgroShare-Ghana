@@ -12,11 +12,11 @@
     "http-server": "^14.1.1"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "node node_modules/react-scripts/bin/react-scripts.js start",
     "serve-simple": "npx http-server ./public -p 3000",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "build": "node node_modules/react-scripts/bin/react-scripts.js build",
+    "test": "node node_modules/react-scripts/bin/react-scripts.js test",
+    "eject": "node node_modules/react-scripts/bin/react-scripts.js eject"
   },
   "browserslist": {
     "production": [

@@ -33,6 +33,8 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: build
     envVars:
+      - key: NODE_VERSION
+        value: 20.11.1
       - key: REACT_APP_API_BASE
         value: https://agroshare-api-g7ze.onrender.com/api
       - key: REACT_APP_ENVIRONMENT
