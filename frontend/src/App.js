@@ -234,7 +234,16 @@ function App() {
   };
 
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: 24, maxWidth: 960, margin: '0 auto' }}>
+    <div
+      style={{
+        fontFamily: 'sans-serif',
+        padding: 24,
+        maxWidth: 960,
+        margin: '0 auto',
+        minHeight: '100vh',
+        background: 'rgba(255, 255, 255, 0.88)',
+      }}
+    >
       <header>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
           <div>

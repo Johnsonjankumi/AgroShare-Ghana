@@ -2,6 +2,11 @@ body {
   margin: 0;
   padding: 0;
   background: #f8fafb;
+  background-image: linear-gradient(rgba(14, 40, 18, 0.35), rgba(14, 40, 18, 0.35)), url('/farm-background.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: #111;
 }
 
@@ -35,7 +40,7 @@ h1, h2 {
 }
 
 section {
-  background: white;
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 14px;
   padding: 18px;
 }
