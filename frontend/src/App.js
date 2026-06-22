@@ -35,6 +35,11 @@ const translations = {
     mobileMoney: 'Mobile Money',
     creditCard: 'Credit Card',
     paymentStatus: 'Payment status',
+    howItWorks: 'How it Works',
+    howStep1: '1. Register as a farmer with your name, phone, and district.',
+    howStep2: '2. List your equipment or browse equipment from other farmers.',
+    howStep3: '3. Book equipment you need or create a rental pool to share costs with others.',
+    howStep4: '4. Pay securely using Paystack, Mobile Money, or Credit Card.',
     ussdTitle: 'USSD interface',
     ussdPhone: 'Phone number',
     ussdSession: 'Session ID',
@@ -82,6 +87,11 @@ const translations = {
     mobileMoney: 'Mobile Money',
     creditCard: 'Credit Card',
     paymentStatus: 'Sika status',
+    howItWorks: 'Nea ɛyɛ sɛn',
+    howStep1: '1. Kyerɛw ɔko wɔ din, fɔn, ne mantam mu.',
+    howStep2: '2. Kyerɛw akode anaa hwɛ akode a afuwfoɔ foforɔ wɔ.',
+    howStep3: '3. Fa akode a wopɛ anaa bɔ nkɔmɔ pool sɛ wobebu sika mu.',
+    howStep4: '4. Tua sika a ɛdi dwuma deɛ wɔde Paystack, Mobile Money, anaa Credit Card.',
     ussdTitle: 'USSD interface',
     ussdPhone: 'Fɔn nɔma',
     ussdSession: 'Session ID',
@@ -293,6 +303,16 @@ function App() {
           </div>
         </div>
       </header>
+
+      <section style={{ marginBottom: 24, padding: 18, background: '#f0f7ff', border: '1px solid #b3d9ff', borderRadius: 10 }}>
+        <h2 style={{ marginTop: 0, color: '#0052cc' }}>{t('howItWorks')}</h2>
+        <div style={{ display: 'grid', gap: 10, color: '#333' }}>
+          <div>{t('howStep1')}</div>
+          <div>{t('howStep2')}</div>
+          <div>{t('howStep3')}</div>
+          <div>{t('howStep4')}</div>
+        </div>
+      </section>
 
       <section style={{ marginBottom: 24 }}>
         {notice && (
