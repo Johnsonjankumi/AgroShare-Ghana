@@ -1,0 +1,43 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import os
+from app.routers import farmers, equipment, bookings, pools, payments, ussd, auth
+
+
+def load_cors_origins() -> list[str]:
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    raw_origins = os.getenv("CORS_ORIGINS", "")
+
+    if raw_origins.strip():
+        return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+    if environment == "development":
+        return [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+        ]
+
+    return []
+
+
+CORS_ORIGINS = load_cors_origins()
+
+app = FastAPI(title="AgroShare Ghana MVP")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(farmers.router, prefix="/api/farmers", tags=["Farmers"])
+app.include_router(equipment.router, prefix="/api/equipment", tags=["Equipment"])
+app.include_router(bookings.router, prefix="/api/bookings", tags=["Bookings"])
+app.include_router(pools.router, prefix="/api/pools", tags=["Rental Pools"])
+app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
+app.include_router(ussd.router, prefix="/api/ussd", tags=["USSD"])

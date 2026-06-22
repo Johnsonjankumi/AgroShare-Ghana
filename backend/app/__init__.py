@@ -1,0 +1,1 @@
+# AgroShare Ghana backend package

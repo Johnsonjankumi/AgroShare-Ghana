@@ -1,0 +1,87 @@
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship
+import os
+from datetime import datetime
+
+
+def load_database_url() -> str:
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        return database_url
+
+    if environment == "development":
+        return "sqlite:///./agroshare.db"
+
+    raise RuntimeError("DATABASE_URL must be set when ENVIRONMENT is production")
+
+
+DATABASE_URL = load_database_url()
+
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Models
+class Farmer(Base):
+    __tablename__ = "farmers"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    phone = Column(String, unique=True, index=True)
+    district = Column(String, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    password = Column(String)  # Hashed password
+
+class Equipment(Base):
+    __tablename__ = "equipment"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_name = Column(String, index=True)
+    type = Column(String)
+    district = Column(String, index=True)
+    price_per_day = Column(Float)
+    description = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Booking(Base):
+    __tablename__ = "bookings"
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, index=True)
+    equipment_id = Column(Integer, index=True)
+    rental_date = Column(String)
+    district = Column(String, index=True)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class RentalPool(Base):
+    __tablename__ = "rental_pools"
+    id = Column(Integer, primary_key=True, index=True)
+    equipment_id = Column(Integer, index=True)
+    farmer_ids = Column(String)  # JSON string
+    rental_date = Column(String)
+    district = Column(String, index=True)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Payment(Base):
+    __tablename__ = "payments"
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, index=True)
+    amount = Column(Float)
+    method = Column(String)
+    mobile_number = Column(String)
+    reference = Column(String, unique=True, index=True)
+    status = Column(String, default="held")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# Create tables
+Base.metadata.create_all(bind=engine)

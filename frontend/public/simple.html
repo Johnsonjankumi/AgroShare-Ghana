@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgroShare Ghana Simple HTML</title>
+  <script src="./config.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f4f7fb; color: #222; }
+    h1, h2 { margin-top: 0; }
+    section { background: #fff; border: 1px solid #dde4ee; border-radius: 10px; padding: 18px; margin-bottom: 18px; }
+    label { display: block; margin-bottom: 12px; }
+    input, textarea, select, button { width: 100%; padding: 10px; margin-top: 6px; border-radius: 8px; border: 1px solid #ccd4e0; font-size: 1rem; }
+    button { background: #1769aa; color: #fff; border: none; cursor: pointer; }
+    button:hover { background: #145c8a; }
+    pre { background: #f2f6fc; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  </style>
+</head>
+<body>
+  <h1>AgroShare Ghana — Simple HTML UI</h1>
+  <p>This page uses only HTML and JavaScript to call the backend APIs directly.</p>
+
+  <section id="origin-section" style="margin-bottom:18px;">
+    <strong>Info:</strong>
+    <div id="origin-info" style="margin-top:8px; padding:10px; background:#fffbea; border:1px solid #f0e6b8; border-radius:8px;">
+      Page origin: <span id="origin-text"></span><br>
+      API base: <span id="api-base-text"></span>
+      <div id="origin-warning" style="margin-top:8px; color:#8a3f00; display:none;"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Backend debug</h2>
+    <button id="load-status">Load API status</button>
+    <pre id="status-output">Click "Load API status" to test connection.</pre>
+  </section>
+
+  <div class="grid">
+    <section>
+      <h2>Register Farmer</h2>
+      <form id="farmer-form">
+        <label>Name<input name="name" required /></label>
+        <label>Phone<input name="phone" required /></label>
+        <label>District<input name="district" value="Sunyani West" required /></label>
+        <button type="submit">Create farmer</button>
+      </form>
+      <pre id="farmer-output"></pre>
+    </section>
+
+    <section>
+      <h2>List Equipment</h2>
+      <form id="equipment-form">
+        <label>Owner<input name="owner_name" required /></label>
+        <label>Type<input name="type" required /></label>
+        <label>District<input name="district" value="Sunyani West" required /></label>
+        <label>Price/day<input type="number" name="price_per_day" required /></label>
+        <label>Description<textarea name="description"></textarea></label>
+        <button type="submit">Create equipment</button>
+      </form>
+      <pre id="equipment-output"></pre>
+    </section>
+  </div>
+
+  <div class="grid">
+    <section>
+      <h2>Create Rental Pool</h2>
+      <form id="pool-form">
+        <label>Farmer ID<input name="farmer_id" required /></label>
+        <label>Equipment ID<input name="equipment_id" required /></label>
+        <label>Rental date<input type="date" name="rental_date" required /></label>
+        <label>District<input name="district" value="Sunyani West" required /></label>
+        <button type="submit">Create pool</button>
+      </form>
+      <pre id="pool-output"></pre>
+    </section>
+
+    <section>
+      <h2>Create Booking</h2>
+      <form id="booking-form">
+        <label>Farmer ID<input name="farmer_id" required /></label>
+        <label>Equipment ID<input name="equipment_id" required /></label>
+        <label>Rental date<input type="date" name="rental_date" required /></label>
+        <label>District<input name="district" value="Sunyani West" required /></label>
+        <button type="submit">Create booking</button>
+      </form>
+      <pre id="booking-output"></pre>
+    </section>
+  </div>
+
+  <div class="grid">
+    <section>
+      <h2>Escrow Payment</h2>
+      <form id="payment-form">
+        <label>Booking ID<input name="booking_id" required /></label>
+        <label>Mobile number<input name="mobile_number" required /></label>
+        <label>Method<select name="method"><option value="paystack">Paystack</option><option value="mobile_money">Mobile Money</option></select></label>
+        <button type="submit">Create payment</button>
+      </form>
+      <pre id="payment-output"></pre>
+    </section>
+
+    <section>
+      <h2>USSD Simulation</h2>
+      <form id="ussd-form">
+        <label>Session ID<input name="session_id" placeholder="optional" /></label>
+        <label>Phone number<input name="phone_number" required /></label>
+        <label>Input text<textarea name="input_text" placeholder="1 or 1,John,024..." required></textarea></label>
+        <button type="submit">Send USSD</button>
+      </form>
+      <pre id="ussd-output"></pre>
+    </section>
+  </div>
+
+  <script>
+    const runtimeConfig = window.AGROSHARE_CONFIG || {};
+    const API_BASE = runtimeConfig.apiBase || '/api';
+    const allowedOrigins = runtimeConfig.allowedOrigins || [window.location.origin];
+
+    document.getElementById('origin-text').textContent = window.location.origin;
+    document.getElementById('api-base-text').textContent = API_BASE;
+    if (!allowedOrigins.includes(window.location.origin)) {
+      const warn = document.getElementById('origin-warning');
+      warn.style.display = 'block';
+      warn.textContent = `Warning: this page origin (${window.location.origin}) is not one of the expected dev origins (${allowedOrigins.join(', ')}). If API calls fail, check backend CORS or serve the page on port 3000.`;
+    }
+
+    const log = (element, value) => {
+      const pre = document.getElementById(element);
+      pre.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    };
+
+    async function fetchWithHints(url, opts) {
+      try {
+        const response = await fetch(url, opts);
+        if (!response.ok) {
+          const text = await response.text().catch(() => null);
+          return { ok: false, status: response.status, body: text };
+        }
+        return { ok: true, status: response.status, body: await response.json() };
+      } catch (error) {
+        const hint = (error && error.message && error.message.includes('Failed to fetch'))
+          ? `Failed to fetch. Possible causes: backend not running at ${API_BASE}, or CORS blocking this origin (${window.location.origin}). Check backend CORS in backend/app/main.py.`
+          : (error.message || String(error));
+        return { ok: false, error: hint };
+      }
+    }
+
+    document.getElementById('load-status').addEventListener('click', async () => {
+      const result = await fetchWithHints(`${API_BASE}/farmers/`);
+      log('status-output', result);
+    });
+
+    document.getElementById('farmer-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.target;
+      const payload = { name: form.name.value, phone: form.phone.value, district: form.district.value };
+      const result = await fetchWithHints(`${API_BASE}/farmers/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      log('farmer-output', result.ok ? result.body : result);
+      form.reset();
+    });
+
+    document.getElementById('equipment-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.target;
+      const payload = { owner_name: form.owner_name.value, type: form.type.value, district: form.district.value, price_per_day: Number(form.price_per_day.value), description: form.description.value };
+      const result = await fetchWithHints(`${API_BASE}/equipment/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      log('equipment-output', result.ok ? result.body : result);
+      form.reset();
+    });
+
+    document.getElementById('pool-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.target;
+      const payload = { farmer_id: Number(form.farmer_id.value), equipment_id: Number(form.equipment_id.value), rental_date: form.rental_date.value, district: form.district.value };
+      const result = await fetchWithHints(`${API_BASE}/pools/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      log('pool-output', result.ok ? result.body : result);
+      form.reset();
+    });
+
+    document.getElementById('booking-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.target;
+      const payload = { farmer_id: Number(form.farmer_id.value), equipment_id: Number(form.equipment_id.value), rental_date: form.rental_date.value, district: form.district.value };
+      const result = await fetchWithHints(`${API_BASE}/bookings/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      log('booking-output', result.ok ? result.body : result);
+      form.reset();
+    });
+
+    document.getElementById('payment-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.target;
+      const payload = { booking_id: Number(form.booking_id.value), mobile_number: form.mobile_number.value, method: form.method.value };
+      const result = await fetchWithHints(`${API_BASE}/payments/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      log('payment-output', result.ok ? result.body : result);
+      form.reset();
+    });
+
+    document.getElementById('ussd-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.target;
+      const payload = { session_id: form.session_id.value || undefined, phone_number: form.phone_number.value, input_text: form.input_text.value };
+      const result = await fetchWithHints(`${API_BASE}/ussd/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = result.ok ? result.body : result;
+      log('ussd-output', data);
+      if (result.ok && data.session_id) {
+        form.session_id.value = data.session_id;
+      }
+    });
+  </script>
+</body>
+</html>

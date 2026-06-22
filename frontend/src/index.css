@@ -1,0 +1,41 @@
+body {
+  margin: 0;
+  padding: 0;
+  background: #f8fafb;
+  color: #111;
+}
+
+input, textarea, select, button {
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+button {
+  cursor: pointer;
+  background: #1769aa;
+  color: white;
+  border: none;
+}
+
+button:hover {
+  background: #145c8a;
+}
+
+label {
+  display: block;
+  margin-bottom: 12px;
+}
+
+h1, h2 {
+  margin: 0 0 12px 0;
+}
+
+section {
+  background: white;
+  border-radius: 14px;
+  padding: 18px;
+}

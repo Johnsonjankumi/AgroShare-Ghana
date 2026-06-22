@@ -1,0 +1,1 @@
+STATUS=200 LEN=13026 {"openapi":"3.1.0","info":{"title":"AgroShare Ghana MVP","version":"0.1.0"},"paths":{"/api/auth/login":{"post":{"tags":["Authentication"],"summary":"Login","description":"Authenticate farmer with phon

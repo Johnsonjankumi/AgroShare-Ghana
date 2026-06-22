@@ -1,0 +1,36 @@
+databases:
+  - name: agroshare-db
+    databaseName: agroshare
+    user: agroshare
+    plan: free
+
+services:
+  - type: web
+    name: agroshare-api
+    env: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agroshare-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://agroshare-frontend.onrender.com
+
+  - type: static
+    name: agroshare-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    envVars:
+      - key: REACT_APP_API_BASE
+        value: https://agroshare-api.onrender.com/api
+      - key: REACT_APP_ENVIRONMENT
+        value: production
