@@ -1,19 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 import os
 from app.routers import farmers, equipment, bookings, pools, payments, ussd, auth, ratings, subscriptions
-
-
-class SimpleCorsMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        return response
 
 
 def load_cors_origins() -> list[str]:
@@ -44,15 +33,12 @@ CORS_ORIGINS = load_cors_origins()
 
 app = FastAPI(title="AgroShare Ghana MVP")
 
-# Add custom CORS middleware directly
-app.add_middleware(SimpleCorsMiddleware)
-
-# Also add standard CORS middleware as backup
+# CORS middleware - MUST be added first before any routers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
 
