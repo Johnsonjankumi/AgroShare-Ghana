@@ -20,8 +20,13 @@ def load_cors_origins() -> list[str]:
             "http://127.0.0.1:3001",
         ]
 
-    # Production: allow all origins (can be restricted later with CORS_ORIGINS env var)
-    return ["*"]
+    # Production: allow specific Render frontend URLs and localhost for testing
+    return [
+        "https://agroshare-frontend.onrender.com",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*",  # Allow all as fallback
+    ]
 
 
 CORS_ORIGINS = load_cors_origins()
