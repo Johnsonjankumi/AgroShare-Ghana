@@ -33,8 +33,19 @@ class PaymentCreateResponse(Payment):
     checkout_url: str | None = None
 
 
+class RetryPaymentResponse(BaseModel):
+    reference: str
+    status: str
+    detail: str
+
+
 def _get_paystack_secret() -> str | None:
     return os.getenv("PAYSTACK_SECRET_KEY")
+
+
+def _get_transfer_recipient_code() -> str | None:
+    # Use a single configured recipient until per-owner recipient mapping is introduced.
+    return os.getenv("PAYSTACK_TRANSFER_RECIPIENT_CODE") or os.getenv("PAYSTACK_DEFAULT_TRANSFER_RECIPIENT_CODE")
 
 
 def _build_checkout_email(mobile_number: str) -> str:
@@ -96,6 +107,77 @@ async def initialize_paystack_transaction(
 
     return body["data"]["authorization_url"]
 
+
+async def verify_paystack_transaction(reference: str) -> str | None:
+    secret = _get_paystack_secret()
+    if not secret:
+        return None
+
+    headers = {"Authorization": f"Bearer {secret}"}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(f"https://api.paystack.co/transaction/verify/{reference}", headers=headers)
+
+    if response.status_code >= 400:
+        return None
+
+    body = response.json()
+    if not body.get("status"):
+        return None
+    return str(body.get("data", {}).get("status") or "").lower()
+
+
+def _resolve_seller_amount(payment: PaymentModel, db: Session) -> float:
+    booking = db.query(BookingModel).filter(BookingModel.id == payment.booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found for payment")
+    equipment = db.query(EquipmentModel).filter(EquipmentModel.id == booking.equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Equipment not found for booking")
+    return round(float(equipment.price_per_day), 2)
+
+
+async def attempt_farmer_payout(payment: PaymentModel, db: Session) -> bool:
+    recipient_code = _get_transfer_recipient_code()
+    secret = _get_paystack_secret()
+    if not recipient_code or not secret:
+        return False
+
+    amount = _resolve_seller_amount(payment, db)
+    payload = {
+        "source": "balance",
+        "amount": int(round(amount * 100)),
+        "recipient": recipient_code,
+        "reason": f"AgroShare payout for {payment.reference}",
+        "reference": f"PAYOUT-{payment.reference}",
+    }
+    headers = {
+        "Authorization": f"Bearer {secret}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post("https://api.paystack.co/transfer", json=payload, headers=headers)
+
+    if response.status_code >= 400:
+        return False
+
+    body = response.json()
+    return bool(body.get("status"))
+
+
+async def settle_payment_and_payout(payment: PaymentModel, db: Session) -> str:
+    # paid: customer charged successfully; released: payout transfer sent successfully
+    payment.status = "paid"
+    db.commit()
+    db.refresh(payment)
+
+    payout_sent = await attempt_farmer_payout(payment, db)
+    if payout_sent:
+        payment.status = "released"
+        db.commit()
+        db.refresh(payment)
+    return payment.status
+
 @router.post("/", response_model=PaymentCreateResponse)
 async def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
     booking = db.query(BookingModel).filter(BookingModel.id == payload.booking_id).first()
@@ -140,17 +222,41 @@ async def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
     return payment
 
 @router.post("/{payment_id}/release", response_model=Payment)
-def release_payment(payment_id: int, db: Session = Depends(get_db)):
+async def release_payment(payment_id: int, db: Session = Depends(get_db)):
     payment = db.query(PaymentModel).filter(PaymentModel.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if payment.status != "held":
-        raise HTTPException(status_code=400, detail="Payment is not held in escrow")
-    
-    payment.status = "released"
-    db.commit()
-    db.refresh(payment)
+    if payment.status not in {"held", "paid", "released"}:
+        raise HTTPException(status_code=400, detail="Payment cannot be released from current status")
+
+    if payment.status == "held":
+        await settle_payment_and_payout(payment, db)
+    elif payment.status == "paid":
+        payout_sent = await attempt_farmer_payout(payment, db)
+        if payout_sent:
+            payment.status = "released"
+            db.commit()
+            db.refresh(payment)
     return payment
+
+
+@router.post("/retry/{reference}", response_model=RetryPaymentResponse)
+async def retry_payment_by_reference(reference: str, db: Session = Depends(get_db)):
+    payment = db.query(PaymentModel).filter(PaymentModel.reference == reference).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment reference not found")
+
+    if payment.status == "released":
+        return RetryPaymentResponse(reference=payment.reference, status=payment.status, detail="Payment already released")
+
+    if payment.status == "held" and payment.method == "paystack":
+        tx_status = await verify_paystack_transaction(payment.reference)
+        if tx_status != "success":
+            raise HTTPException(status_code=400, detail="Transaction is not yet successful on Paystack")
+
+    final_status = await settle_payment_and_payout(payment, db)
+    detail = "Payout transfer sent successfully" if final_status == "released" else "Payment verified; payout pending transfer"
+    return RetryPaymentResponse(reference=payment.reference, status=final_status, detail=detail)
 
 class PaymentWebhook(BaseModel):
     event: str
@@ -203,9 +309,7 @@ async def paystack_webhook(
         raise HTTPException(status_code=404, detail="Payment not found")
 
     if status.lower() == "success":
-        payment.status = "released"
-        db.commit()
-        db.refresh(payment)
+        await settle_payment_and_payout(payment, db)
 
     return {"reference": reference, "status": payment.status}
 

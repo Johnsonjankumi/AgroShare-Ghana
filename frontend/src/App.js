@@ -172,6 +172,7 @@ function App() {
   const [bookingForm, setBookingForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [poolForm, setPoolForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [paymentForm, setPaymentForm] = useState({ booking_id: '', mobile_number: '', method: 'paystack' });
+  const [retryReference, setRetryReference] = useState('');
   const [subscriptionForm, setSubscriptionForm] = useState({ farmer_id: '', mobile_number: '' });
   const [ussdForm, setUssdForm] = useState({ session_id: localStorage.getItem('ussdSession') || '', phone_number: '', input_text: '' });
   const [notice, setNotice] = useState(null);
@@ -183,6 +184,13 @@ function App() {
   const markersRef = useRef([]);
 
   const t = key => translations[lang][key] || key;
+
+  const paymentStatusLabel = status => {
+    if (status === 'held') return 'Pending verification';
+    if (status === 'paid') return 'Paid';
+    if (status === 'released') return 'Released';
+    return status;
+  };
 
   // Auto-dismiss notification after 5 seconds
   const showNotice = (type, text) => setNotice({ type, text });
@@ -356,6 +364,24 @@ function App() {
     setPayments(p => p.map(x => x.id === updated.id ? updated : x));
     refreshOwnerActivity();
     showNotice('success', '✅ Payment completed and released successfully!');
+  };
+
+  const retryHeldPaymentByReference = async () => {
+    if (!retryReference.trim()) {
+      showNotice('error', 'Enter a payment reference to retry.');
+      return;
+    }
+
+    const res = await fetch(`${API_BASE}/payments/retry/${encodeURIComponent(retryReference.trim())}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) { showNotice('error', data.detail || 'Unable to retry payment.'); return; }
+
+    const refresh = await fetch(`${API_BASE}/payments/`);
+    const refreshed = await refresh.json();
+    setPayments(Array.isArray(refreshed) ? refreshed : []);
+    refreshOwnerActivity();
+    setRetryReference('');
+    showNotice('success', `✅ ${data.detail}`);
   };
 
   const sendUssd = async e => {
@@ -684,13 +710,25 @@ function App() {
           <div style={{ marginTop: 12 }}>
             {payments.length > 0 ? payments.map(payment => (
               <div key={payment.id} style={{ marginBottom: 10, padding: 10, border: '1px solid #e0e0e0', borderRadius: 8, background: '#fafafa', fontSize: '0.88rem' }}>
-                <div><strong>GHS {Number(payment.amount ?? 0).toFixed(2)}</strong> · {payment.status}</div>
+                <div><strong>GHS {Number(payment.amount ?? 0).toFixed(2)}</strong> · {paymentStatusLabel(payment.status)}</div>
                 <div style={{ color: '#777', wordBreak: 'break-all' }}>{payment.reference}</div>
-                {payment.status === 'held' && (
+                {payment.status !== 'released' && (
                   <button type="button" onClick={() => releasePayment(payment.id)} style={{ marginTop: 6, background: '#2e7d32' }}>✅ {t('complete')}</button>
                 )}
               </div>
             )) : <p style={{ color: '#888' }}>{t('noPayments')}</p>}
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #ddd' }}>
+              <div style={{ fontSize: '0.84rem', color: '#555', marginBottom: 6 }}>Admin retry old held payments by reference</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  value={retryReference}
+                  onChange={e => setRetryReference(e.target.value)}
+                  placeholder="ESCROW-..."
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <button type="button" onClick={retryHeldPaymentByReference} style={{ whiteSpace: 'nowrap' }}>Retry</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
