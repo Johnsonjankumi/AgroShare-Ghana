@@ -474,12 +474,14 @@ function App() {
           <div className="pricing-card">
             <div style={{ fontWeight: 700 }}>{t('monthly')}</div>
             <div className="price">GHS 80</div>
-            <div className="period">/ $8 per month</div>
+            <div className="period">/ per month — cancel anytime</div>
             <ul style={{ textAlign: 'left', paddingLeft: 18, color: '#333', fontSize: '0.88rem', marginBottom: 16 }}>
-              <li>Full equipment listing</li>
-              <li>Booking &amp; rental pools</li>
-              <li>Payment processing</li>
-              <li>Map visibility</li>
+              <li>✅ List unlimited equipment</li>
+              <li>✅ Receive bookings &amp; rental requests</li>
+              <li>✅ Secure escrow payments (your money is protected)</li>
+              <li>✅ SMS &amp; app alerts when someone books your tool</li>
+              <li>✅ Verified seller badge (builds trust with buyers)</li>
+              <li>✅ Access to all renters across Ghana</li>
             </ul>
             <button type="button" onClick={() => submitSubscription('monthly')}>{t('subscribe')}</button>
           </div>
@@ -490,10 +492,13 @@ function App() {
             <div className="price">GHS 800</div>
             <div className="period">/ GHS 80/mo × 10 months (2 months free)</div>
             <ul style={{ textAlign: 'left', paddingLeft: 18, color: '#333', fontSize: '0.88rem', marginBottom: 16 }}>
-              <li>Everything in Monthly</li>
-              <li>2 months free</li>
-              <li>Priority support</li>
-              <li>Featured listing</li>
+              <li>✅ Everything in Monthly</li>
+              <li>⭐ Top of search results (get seen first)</li>
+              <li>⭐ Gold verified badge on your listings</li>
+              <li>⭐ Priority customer support (fast response)</li>
+              <li>⭐ Early access to new features</li>
+              <li>⭐ Free business profile page for your farm</li>
+              <li>🎁 2 months completely free</li>
             </ul>
             <button type="button" onClick={() => submitSubscription('yearly')}>{t('subscribe')}</button>
           </div>
