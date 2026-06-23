@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -29,6 +29,54 @@ DATABASE_URL = load_database_url()
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def _sqlite_column_exists(conn, table_name: str, column_name: str) -> bool:
+    rows = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+    return any(row[1] == column_name for row in rows)
+
+
+def _postgres_column_exists(conn, table_name: str, column_name: str) -> bool:
+    row = conn.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = :table_name
+              AND column_name = :column_name
+            LIMIT 1
+            """
+        ),
+        {"table_name": table_name, "column_name": column_name},
+    ).fetchone()
+    return row is not None
+
+
+def ensure_legacy_schema_compatibility() -> None:
+    """Add columns that may be missing in older deployed databases."""
+    is_sqlite = "sqlite" in DATABASE_URL
+    with engine.begin() as conn:
+        migrations = {
+            "farmers": [
+                ("password", "VARCHAR"),
+                ("latitude", "FLOAT"),
+                ("longitude", "FLOAT"),
+                ("created_at", "TIMESTAMP"),
+            ],
+            "equipment": [
+                ("category", "VARCHAR"),
+                ("photo_url", "VARCHAR"),
+                ("description", "VARCHAR"),
+                ("created_at", "TIMESTAMP"),
+            ],
+        }
+
+        for table_name, columns in migrations.items():
+            for column_name, column_type in columns:
+                exists = _sqlite_column_exists(conn, table_name, column_name) if is_sqlite else _postgres_column_exists(conn, table_name, column_name)
+                if exists:
+                    continue
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"))
 
 # Dependency
 def get_db():
@@ -118,3 +166,4 @@ class Subscription(Base):
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+ensure_legacy_schema_compatibility()
