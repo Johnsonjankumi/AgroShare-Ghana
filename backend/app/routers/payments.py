@@ -159,9 +159,13 @@ class PaymentWebhook(BaseModel):
 
 def verify_paystack_signature(raw_body: bytes, signature: str | None) -> None:
     environment = os.getenv("ENVIRONMENT", "development").lower()
-    secret = os.getenv("PAYSTACK_WEBHOOK_SECRET") or os.getenv("PAYSTACK_SECRET_KEY")
+    configured_secrets = [
+        os.getenv("PAYSTACK_WEBHOOK_SECRET"),
+        os.getenv("PAYSTACK_SECRET_KEY"),
+    ]
+    secrets = [value for value in configured_secrets if value]
 
-    if not secret:
+    if not secrets:
         if environment == "production":
             raise HTTPException(status_code=503, detail="Paystack webhook secret is not configured")
         return
@@ -169,8 +173,14 @@ def verify_paystack_signature(raw_body: bytes, signature: str | None) -> None:
     if not signature:
         raise HTTPException(status_code=400, detail="Missing Paystack signature")
 
-    expected_signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
-    if not hmac.compare_digest(expected_signature, signature):
+    valid_signature = False
+    for secret in secrets:
+        expected_signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+        if hmac.compare_digest(expected_signature, signature):
+            valid_signature = True
+            break
+
+    if not valid_signature:
         raise HTTPException(status_code=400, detail="Invalid Paystack signature")
 
 @router.post("/webhook")
