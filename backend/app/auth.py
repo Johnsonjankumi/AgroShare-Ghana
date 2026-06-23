@@ -5,7 +5,20 @@ import os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+def load_secret_key() -> str:
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    secret_key = os.getenv("JWT_SECRET")
+
+    if secret_key:
+        return secret_key
+
+    if environment == "development":
+        return "dev-secret-key"
+
+    raise RuntimeError("JWT_SECRET must be set when ENVIRONMENT is production")
+
+
+SECRET_KEY = load_secret_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

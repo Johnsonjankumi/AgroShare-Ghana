@@ -260,8 +260,10 @@ function App() {
     const data = await res.json();
     if (!res.ok) { showNotice('error', data.detail || 'Failed to register farmer.'); return; }
     setFarmers(f => [...f, data]);
+    setBookingForm(b => ({ ...b, farmer_id: data.id }));
+    setSubscriptionForm(s => ({ ...s, farmer_id: String(data.id), mobile_number: data.phone }));
     setForm({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null });
-    showNotice('success', `✅ Farmer "${data.name}" registered! Your Farmer ID is ${data.id}. Please save this ID.`);
+    showNotice('success', `✅ Farmer "${data.name}" registered! Your Farmer ID is ${data.id}. It has been sent to the booking and subscription forms.`);
   };
 
   const submitEquipment = async e => {
@@ -485,8 +487,8 @@ function App() {
             <div style={{ fontWeight: 700 }}>
               {t('yearly')} <span style={{ background: '#1769aa', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.75rem' }}>{t('save')}</span>
             </div>
-            <div className="price">GHS 400</div>
-            <div className="period">/ $40 per year</div>
+            <div className="price">GHS 800</div>
+            <div className="period">/ GHS 80/mo × 10 months (2 months free)</div>
             <ul style={{ textAlign: 'left', paddingLeft: 18, color: '#333', fontSize: '0.88rem', marginBottom: 16 }}>
               <li>Everything in Monthly</li>
               <li>2 months free</li>

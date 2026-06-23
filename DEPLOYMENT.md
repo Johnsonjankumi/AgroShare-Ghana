@@ -193,6 +193,12 @@ CORS_ORIGINS=https://your-domain.com,https://www.your-domain.com
 # JWT
 JWT_SECRET=<generate-with-openssl-rand-hex-32>
 
+# Optional API docs exposure override
+EXPOSE_API_DOCS=false
+
+# Payments
+PAYSTACK_WEBHOOK_SECRET=<your-paystack-secret-key>
+
 # Frontend
 REACT_APP_API_BASE=https://api.your-domain.com/api
 ```
@@ -212,6 +218,8 @@ Create a root `.env` file for `docker-compose.prod.yml`:
 DATABASE_URL=postgresql://user:password@host:5432/agroshare
 CORS_ORIGINS=https://your-frontend-domain.com,https://www.your-frontend-domain.com
 JWT_SECRET=replace-this-with-a-long-random-secret
+EXPOSE_API_DOCS=false
+PAYSTACK_WEBHOOK_SECRET=replace-this-with-your-paystack-secret
 REACT_APP_API_BASE=https://api.your-domain.com/api
 ```
 

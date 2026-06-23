@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
+import hashlib
+import hmac
+import os
+from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 from typing import List
 from sqlalchemy.orm import Session
@@ -37,9 +40,12 @@ def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
     last_payment = db.query(PaymentModel).order_by(PaymentModel.id.desc()).first()
     next_id = (last_payment.id + 1) if last_payment else 1
     
-    amount = round(equipment.price_per_day * 1.05, 2)
+    PLATFORM_FEE_RATE = 0.10  # 10% added on top — seller gets full posted price
+    seller_amount = round(equipment.price_per_day, 2)
+    platform_fee = round(seller_amount * PLATFORM_FEE_RATE, 2)
+    amount = round(seller_amount + platform_fee, 2)  # customer pays seller price + 10%
     reference = f"ESCROW-{next_id}-{payload.booking_id}"
-    
+
     payment = PaymentModel(
         booking_id=payload.booking_id,
         amount=amount,
@@ -70,17 +76,32 @@ class PaymentWebhook(BaseModel):
     event: str
     data: dict
 
+
+def verify_paystack_signature(raw_body: bytes, signature: str | None) -> None:
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    secret = os.getenv("PAYSTACK_WEBHOOK_SECRET") or os.getenv("PAYSTACK_SECRET_KEY")
+
+    if not secret:
+        if environment == "production":
+            raise HTTPException(status_code=503, detail="Paystack webhook secret is not configured")
+        return
+
+    if not signature:
+        raise HTTPException(status_code=400, detail="Missing Paystack signature")
+
+    expected_signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+    if not hmac.compare_digest(expected_signature, signature):
+        raise HTTPException(status_code=400, detail="Invalid Paystack signature")
+
 @router.post("/webhook")
-def paystack_webhook(
+async def paystack_webhook(
+    request: Request,
     payload: PaymentWebhook,
-    x_paystack_signature: str | None = None,
+    x_paystack_signature: str | None = Header(default=None, alias="x-paystack-signature"),
     db: Session = Depends(get_db),
 ):
-    if x_paystack_signature:
-        # This is a stub for Paystack webhook verification.
-        # In production, verify the signature using a secret and the full request body.
-        if not x_paystack_signature.startswith("paystack-test-"):
-            raise HTTPException(status_code=400, detail="Invalid Paystack signature")
+    raw_body = await request.body()
+    verify_paystack_signature(raw_body, x_paystack_signature)
 
     reference = payload.data.get("reference")
     status = payload.data.get("status")

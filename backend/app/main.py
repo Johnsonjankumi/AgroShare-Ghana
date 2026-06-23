@@ -5,14 +5,16 @@ import os
 from app.routers import farmers, equipment, bookings, pools, payments, ussd, auth, ratings, subscriptions
 
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+
+
 def load_cors_origins() -> list[str]:
-    environment = os.getenv("ENVIRONMENT", "development").lower()
     raw_origins = os.getenv("CORS_ORIGINS", "")
 
     if raw_origins.strip():
         return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
-    if environment == "development":
+    if ENVIRONMENT == "development":
         return [
             "http://localhost:3000",
             "http://localhost:3001",
@@ -20,23 +22,30 @@ def load_cors_origins() -> list[str]:
             "http://127.0.0.1:3001",
         ]
 
-    # Production: allow specific Render frontend URLs and localhost for testing
+    # Production fallback for the known hosted frontend only.
     return [
         "https://agroshare-frontend.onrender.com",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "*",  # Allow all as fallback
     ]
 
 
-CORS_ORIGINS = load_cors_origins()
+def docs_enabled() -> bool:
+    return ENVIRONMENT != "production" or os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
 
-app = FastAPI(title="AgroShare Ghana MVP")
+
+CORS_ORIGINS = load_cors_origins()
+API_DOCS_ENABLED = docs_enabled()
+
+app = FastAPI(
+    title="AgroShare Ghana MVP",
+    docs_url="/docs" if API_DOCS_ENABLED else None,
+    redoc_url="/redoc" if API_DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if API_DOCS_ENABLED else None,
+)
 
 # CORS middleware - MUST be added first before any routers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],

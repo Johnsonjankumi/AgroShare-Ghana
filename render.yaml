@@ -25,6 +25,10 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: https://agroshare-frontend.onrender.com
+      - key: EXPOSE_API_DOCS
+        value: "false"
+      - key: PAYSTACK_WEBHOOK_SECRET
+        generateValue: true
 
   - type: web
     name: agroshare-frontend
