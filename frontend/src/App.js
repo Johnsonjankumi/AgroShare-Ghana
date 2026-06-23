@@ -310,8 +310,15 @@ function App() {
     const data = await res.json();
     if (!res.ok) { showNotice('error', data.detail || 'Unable to create payment. Check the booking ID and try again.'); return; }
     setPayments(p => [...p, data]);
-    setPaymentForm({ booking_id: '', mobile_number: '', method: 'paystack' });
     refreshOwnerActivity();
+
+    if (data.checkout_url) {
+      showNotice('success', 'Redirecting to Paystack checkout...');
+      window.location.assign(data.checkout_url);
+      return;
+    }
+
+    setPaymentForm({ booking_id: '', mobile_number: '', method: 'paystack' });
     showNotice('success', `✅ Payment of GHS ${Number(data.amount).toFixed(2)} created! Reference: ${data.reference}`);
   };
 
