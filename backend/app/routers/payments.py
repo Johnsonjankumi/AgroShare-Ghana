@@ -37,6 +37,7 @@ class RetryPaymentResponse(BaseModel):
     reference: str
     status: str
     detail: str
+    transfer_error: str | None = None
 
 
 def _get_paystack_secret() -> str | None:
@@ -179,25 +180,40 @@ async def attempt_farmer_payout(payment: PaymentModel, db: Session) -> bool:
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.post("https://api.paystack.co/transfer", json=payload, headers=headers)
 
-    if response.status_code >= 400:
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+
+    if response.status_code >= 400 or not body.get("status"):
+        error_message = (
+            body.get("message")
+            or body.get("data", {}).get("message")
+            or body.get("data", {}).get("gateway_response")
+            or response.text.strip()
+            or f"Paystack transfer failed with HTTP {response.status_code}"
+        )
+        setattr(payment, "transfer_error", error_message)
         return False
 
-    body = response.json()
-    return bool(body.get("status"))
+    setattr(payment, "transfer_error", None)
+    return True
 
 
-async def settle_payment_and_payout(payment: PaymentModel, db: Session) -> str:
+async def settle_payment_and_payout(payment: PaymentModel, db: Session) -> tuple[str, str | None]:
     # paid: customer charged successfully; released: payout transfer sent successfully
     payment.status = "paid"
     db.commit()
     db.refresh(payment)
 
     payout_sent = await attempt_farmer_payout(payment, db)
+    transfer_error = getattr(payment, "transfer_error", None)
     if payout_sent:
         payment.status = "released"
         db.commit()
         db.refresh(payment)
-    return payment.status
+        transfer_error = None
+    return payment.status, transfer_error
 
 @router.post("/", response_model=PaymentCreateResponse)
 async def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
@@ -275,9 +291,9 @@ async def retry_payment_by_reference(reference: str, db: Session = Depends(get_d
         if tx_status != "success":
             raise HTTPException(status_code=400, detail="Transaction is not yet successful on Paystack")
 
-    final_status = await settle_payment_and_payout(payment, db)
-    detail = "Payout transfer sent successfully" if final_status == "released" else "Payment verified; payout pending transfer"
-    return RetryPaymentResponse(reference=payment.reference, status=final_status, detail=detail)
+    final_status, transfer_error = await settle_payment_and_payout(payment, db)
+    detail = "Payout transfer sent successfully" if final_status == "released" else (transfer_error or "Payment verified; payout pending transfer")
+    return RetryPaymentResponse(reference=payment.reference, status=final_status, detail=detail, transfer_error=transfer_error)
 
 class PaymentWebhook(BaseModel):
     event: str
