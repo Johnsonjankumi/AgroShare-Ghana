@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import List
 import httpx
 from sqlalchemy.orm import Session
-from app.database import get_db, Payment as PaymentModel, Booking as BookingModel, Equipment as EquipmentModel
+from app.database import get_db, Payment as PaymentModel, Booking as BookingModel, Equipment as EquipmentModel, Farmer as FarmerModel
 
 router = APIRouter()
 
@@ -44,8 +44,12 @@ def _get_paystack_secret() -> str | None:
 
 
 def _get_transfer_recipient_code() -> str | None:
-    # Use a single configured recipient until per-owner recipient mapping is introduced.
+    # Legacy fallback only; per-farmer recipient codes should be used in production.
     return os.getenv("PAYSTACK_TRANSFER_RECIPIENT_CODE") or os.getenv("PAYSTACK_DEFAULT_TRANSFER_RECIPIENT_CODE")
+
+
+def _legacy_payout_fallback_enabled() -> bool:
+    return os.getenv("ALLOW_LEGACY_GLOBAL_RECIPIENT_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _build_checkout_email(mobile_number: str) -> str:
@@ -137,7 +141,24 @@ def _resolve_seller_amount(payment: PaymentModel, db: Session) -> float:
 
 
 async def attempt_farmer_payout(payment: PaymentModel, db: Session) -> bool:
-    recipient_code = _get_transfer_recipient_code()
+    booking = db.query(BookingModel).filter(BookingModel.id == payment.booking_id).first()
+    if not booking:
+        return False
+
+    equipment = db.query(EquipmentModel).filter(EquipmentModel.id == booking.equipment_id).first()
+    if not equipment:
+        return False
+
+    recipient_code = None
+    if equipment.owner_farmer_id:
+        owner_farmer = db.query(FarmerModel).filter(FarmerModel.id == equipment.owner_farmer_id).first()
+        if owner_farmer and owner_farmer.payout_recipient_code:
+            recipient_code = owner_farmer.payout_recipient_code
+
+    if not recipient_code and _legacy_payout_fallback_enabled():
+        # Optional fallback for older records; keep disabled in production to avoid misrouting payouts.
+        recipient_code = _get_transfer_recipient_code()
+
     secret = _get_paystack_secret()
     if not recipient_code or not secret:
         return False

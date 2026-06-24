@@ -167,8 +167,8 @@ function App() {
     try { return JSON.parse(localStorage.getItem('ussdResponse')); } catch { return null; }
   });
   const [district, setDistrict] = useState('Greater Accra');
-  const [form, setForm] = useState({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null });
-  const [equipmentForm, setEquipmentForm] = useState({ owner_name: '', type: '', category: 'other', district: 'Greater Accra', price_per_day: '', description: '' });
+  const [form, setForm] = useState({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null, payout_account_type: 'mobile_money', payout_bank_code: 'MTN', payout_account_number: '' });
+  const [equipmentForm, setEquipmentForm] = useState({ owner_name: '', owner_farmer_id: '', type: '', category: 'other', district: 'Greater Accra', price_per_day: '', description: '' });
   const [bookingForm, setBookingForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [poolForm, setPoolForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [paymentForm, setPaymentForm] = useState({ booking_id: '', mobile_number: '', method: 'paystack' });
@@ -270,7 +270,7 @@ function App() {
     setFarmers(f => [...f, data]);
     setBookingForm(b => ({ ...b, farmer_id: data.id }));
     setSubscriptionForm(s => ({ ...s, farmer_id: String(data.id), mobile_number: data.phone }));
-    setForm({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null });
+    setForm({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null, payout_account_type: 'mobile_money', payout_bank_code: 'MTN', payout_account_number: '' });
     showNotice('success', `✅ Farmer "${data.name}" registered! Your Farmer ID is ${data.id}. It has been sent to the booking and subscription forms.`);
   };
 
@@ -278,12 +278,16 @@ function App() {
     e.preventDefault();
     const res = await fetch(`${API_BASE}/equipment/`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...equipmentForm, price_per_day: Number(equipmentForm.price_per_day) }),
+      body: JSON.stringify({
+        ...equipmentForm,
+        owner_farmer_id: equipmentForm.owner_farmer_id ? Number(equipmentForm.owner_farmer_id) : null,
+        price_per_day: Number(equipmentForm.price_per_day),
+      }),
     });
     const data = await res.json();
     if (!res.ok) { showNotice('error', data.detail || 'Failed to add equipment listing.'); return; }
     setEquipment(eq => [...eq, data]);
-    setEquipmentForm({ owner_name: '', type: '', category: 'other', district, price_per_day: '', description: '' });
+    setEquipmentForm({ owner_name: '', owner_farmer_id: '', type: '', category: 'other', district, price_per_day: '', description: '' });
     showNotice('success', `✅ Equipment listed! Equipment ID is ${data.id}.`);
   };
 
@@ -579,6 +583,14 @@ function App() {
             <label>{t('farmerName')}<br /><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></label>
             <label>{t('phone')}<br /><input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required /></label>
             <label>{t('password')}<br /><input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required /></label>
+            <label>Payout account type<br />
+              <select value={form.payout_account_type} onChange={e => setForm(f => ({ ...f, payout_account_type: e.target.value }))}>
+                <option value="mobile_money">Mobile Money</option>
+                <option value="nuban">Bank Account</option>
+              </select>
+            </label>
+            <label>Payout network/bank code<br /><input value={form.payout_bank_code} onChange={e => setForm(f => ({ ...f, payout_bank_code: e.target.value }))} placeholder="e.g. MTN" /></label>
+            <label>Payout account number (optional now, required for auto payout)<br /><input value={form.payout_account_number} onChange={e => setForm(f => ({ ...f, payout_account_number: e.target.value }))} placeholder="e.g. 0246326373" /></label>
             <label>{t('district')}<br />
               <select value={form.district} onChange={e => setForm(f => ({ ...f, district: e.target.value }))}>
                 {DISTRICTS.map(d => <option key={d}>{d}</option>)}
@@ -597,6 +609,7 @@ function App() {
           <h2>🚜 {t('listEquipment')}</h2>
           <form onSubmit={submitEquipment}>
             <label>{t('ownerName')}<br /><input value={equipmentForm.owner_name} onChange={e => setEquipmentForm(f => ({ ...f, owner_name: e.target.value }))} required /></label>
+            <label>Owner Farmer ID (for payout routing)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" /></label>
             <label>{t('equipmentType')}<br /><input value={equipmentForm.type} onChange={e => setEquipmentForm(f => ({ ...f, type: e.target.value }))} required /></label>
             <label>{t('equipmentCategory')}<br />
               <select value={equipmentForm.category} onChange={e => setEquipmentForm(f => ({ ...f, category: e.target.value }))}>

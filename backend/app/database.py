@@ -62,12 +62,17 @@ def ensure_legacy_schema_compatibility() -> None:
                 ("latitude", "FLOAT"),
                 ("longitude", "FLOAT"),
                 ("created_at", "TIMESTAMP"),
+                ("payout_account_type", "VARCHAR"),
+                ("payout_bank_code", "VARCHAR"),
+                ("payout_account_number", "VARCHAR"),
+                ("payout_recipient_code", "VARCHAR"),
             ],
             "equipment": [
                 ("category", "VARCHAR"),
                 ("photo_url", "VARCHAR"),
                 ("description", "VARCHAR"),
                 ("created_at", "TIMESTAMP"),
+                ("owner_farmer_id", "INTEGER"),
             ],
         }
 
@@ -97,6 +102,10 @@ class Farmer(Base):
     longitude = Column(Float, nullable=True)  # GPS location
     created_at = Column(DateTime, default=datetime.utcnow)
     password = Column(String)  # Hashed password
+    payout_account_type = Column(String, nullable=True, default="mobile_money")
+    payout_bank_code = Column(String, nullable=True)
+    payout_account_number = Column(String, nullable=True)
+    payout_recipient_code = Column(String, nullable=True, index=True)
 
 class Equipment(Base):
     __tablename__ = "equipment"
@@ -108,6 +117,7 @@ class Equipment(Base):
     price_per_day = Column(Float)
     description = Column(String)
     photo_url = Column(String, nullable=True)  # URL to equipment photo
+    owner_farmer_id = Column(Integer, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Booking(Base):

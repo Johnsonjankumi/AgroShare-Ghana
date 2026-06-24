@@ -11,6 +11,7 @@ router = APIRouter()
 
 class EquipmentCreate(BaseModel):
     owner_name: str
+    owner_farmer_id: Optional[int] = None
     type: str
     category: str = "other"  # tractor, plow, pump, etc.
     district: str
@@ -21,6 +22,7 @@ class EquipmentCreate(BaseModel):
 class Equipment(BaseModel):
     id: int
     owner_name: str
+    owner_farmer_id: Optional[int] = None
     type: str
     category: Optional[str] = None
     district: str
