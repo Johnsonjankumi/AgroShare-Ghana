@@ -187,8 +187,8 @@ function App() {
 
   const paymentStatusLabel = status => {
     if (status === 'held') return 'Pending verification';
-    if (status === 'paid') return 'Paid';
-    if (status === 'released') return 'Released';
+    if (status === 'paid') return 'Paid (seller payout is manual)';
+    if (status === 'released') return 'Released (auto payout)';
     return status;
   };
 
@@ -367,7 +367,7 @@ function App() {
     if (!res.ok) { showNotice('error', updated.detail || 'Unable to release payment.'); return; }
     setPayments(p => p.map(x => x.id === updated.id ? updated : x));
     refreshOwnerActivity();
-    showNotice('success', '✅ Payment completed and released successfully!');
+    showNotice('success', '✅ Payment verified. Seller payout will be handled manually.');
   };
 
   const retryHeldPaymentByReference = async () => {
@@ -731,7 +731,7 @@ function App() {
               </div>
             )) : <p style={{ color: '#888' }}>{t('noPayments')}</p>}
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #ddd' }}>
-              <div style={{ fontSize: '0.84rem', color: '#555', marginBottom: 6 }}>Admin retry old held payments by reference</div>
+              <div style={{ fontSize: '0.84rem', color: '#555', marginBottom: 6 }}>Admin retry payment verification by reference</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input
                   value={retryReference}

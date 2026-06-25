@@ -40,6 +40,21 @@ class RetryPaymentResponse(BaseModel):
     transfer_error: str | None = None
 
 
+class SellerNotificationRequest(BaseModel):
+    seller_phone: str | None = None
+    seller_amount: float | None = None
+    message: str | None = None
+
+
+class SellerNotificationResponse(BaseModel):
+    reference: str
+    seller_phone: str
+    seller_amount: float
+    message: str
+    sent: bool
+    detail: str
+
+
 def _get_paystack_secret() -> str | None:
     return os.getenv("PAYSTACK_SECRET_KEY")
 
@@ -51,6 +66,11 @@ def _get_transfer_recipient_code() -> str | None:
 
 def _legacy_payout_fallback_enabled() -> bool:
     return os.getenv("ALLOW_LEGACY_GLOBAL_RECIPIENT_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _auto_payout_enabled() -> bool:
+    # Manual payout is now the default operational mode.
+    return os.getenv("AUTO_PAYOUT_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _build_checkout_email(mobile_number: str) -> str:
@@ -206,6 +226,9 @@ async def settle_payment_and_payout(payment: PaymentModel, db: Session) -> tuple
     db.commit()
     db.refresh(payment)
 
+    if not _auto_payout_enabled():
+        return payment.status, "Auto payout disabled; transfer to seller manually."
+
     payout_sent = await attempt_farmer_payout(payment, db)
     transfer_error = getattr(payment, "transfer_error", None)
     if payout_sent:
@@ -230,10 +253,10 @@ async def create_payment(payload: PaymentCreate, db: Session = Depends(get_db)):
     # Generate unique reference
     reference = f"ESCROW-{payload.booking_id}-{uuid.uuid4().hex[:10].upper()}"
 
-    PLATFORM_FEE_RATE = 0.10  # 10% added on top — seller gets full posted price
+    PLATFORM_FEE_RATE = 0.20  # 20% added on top in manual payout mode
     seller_amount = round(equipment.price_per_day, 2)
     platform_fee = round(seller_amount * PLATFORM_FEE_RATE, 2)
-    amount = round(seller_amount + platform_fee, 2)  # customer pays seller price + 10%
+    amount = round(seller_amount + platform_fee, 2)  # customer pays seller price + 20%
 
     checkout_url = None
     if normalized_method == "paystack":
@@ -269,6 +292,8 @@ async def release_payment(payment_id: int, db: Session = Depends(get_db)):
     if payment.status == "held":
         await settle_payment_and_payout(payment, db)
     elif payment.status == "paid":
+        if not _auto_payout_enabled():
+            return payment
         payout_sent = await attempt_farmer_payout(payment, db)
         if payout_sent:
             payment.status = "released"
@@ -292,8 +317,45 @@ async def retry_payment_by_reference(reference: str, db: Session = Depends(get_d
             raise HTTPException(status_code=400, detail="Transaction is not yet successful on Paystack")
 
     final_status, transfer_error = await settle_payment_and_payout(payment, db)
-    detail = "Payout transfer sent successfully" if final_status == "released" else (transfer_error or "Payment verified; payout pending transfer")
+    detail = "Payout transfer sent successfully" if final_status == "released" else (transfer_error or "Payment verified; seller payout pending manual transfer")
     return RetryPaymentResponse(reference=payment.reference, status=final_status, detail=detail, transfer_error=transfer_error)
+
+
+@router.post("/{reference}/notify-seller", response_model=SellerNotificationResponse)
+def notify_seller_after_manual_transfer(reference: str, payload: SellerNotificationRequest, db: Session = Depends(get_db)):
+    payment = db.query(PaymentModel).filter(PaymentModel.reference == reference).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment reference not found")
+
+    booking = db.query(BookingModel).filter(BookingModel.id == payment.booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found for payment")
+
+    equipment = db.query(EquipmentModel).filter(EquipmentModel.id == booking.equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Equipment not found for booking")
+
+    seller_phone = (payload.seller_phone or "").strip()
+    if not seller_phone and equipment.owner_farmer_id:
+        owner_farmer = db.query(FarmerModel).filter(FarmerModel.id == equipment.owner_farmer_id).first()
+        if owner_farmer and owner_farmer.phone:
+            seller_phone = owner_farmer.phone.strip()
+
+    if not seller_phone:
+        raise HTTPException(status_code=400, detail="Seller phone not found. Provide seller_phone in request body.")
+
+    seller_amount = round(float(payload.seller_amount if payload.seller_amount is not None else equipment.price_per_day), 2)
+    default_message = f"You have received a payment of GHS {seller_amount:.2f} from agrosharaga.com."
+    message = (payload.message or default_message).strip()
+
+    return SellerNotificationResponse(
+        reference=payment.reference,
+        seller_phone=seller_phone,
+        seller_amount=seller_amount,
+        message=message,
+        sent=False,
+        detail="SMS gateway is not configured. Send this message manually to the seller phone.",
+    )
 
 class PaymentWebhook(BaseModel):
     event: str
