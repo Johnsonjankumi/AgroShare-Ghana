@@ -73,6 +73,67 @@ def _auto_payout_enabled() -> bool:
     return os.getenv("AUTO_PAYOUT_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _sms_provider() -> str:
+    return os.getenv("SMS_PROVIDER", "").strip().lower()
+
+
+def _normalize_phone_for_ghana(phone: str) -> str:
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if digits.startswith("233"):
+        return digits
+    if digits.startswith("0") and len(digits) >= 10:
+        return "233" + digits[1:]
+    return digits
+
+
+async def _send_sms_with_arkesel(phone: str, message: str) -> tuple[bool, str]:
+    api_key = os.getenv("ARKESEL_API_KEY", "").strip()
+    sender = os.getenv("ARKESEL_SENDER_ID", "AgroShare")
+    if not api_key:
+        return False, "ARKESEL_API_KEY is not configured"
+
+    recipient = _normalize_phone_for_ghana(phone)
+    payload = {
+        "sender": sender,
+        "message": message,
+        "recipients": [recipient],
+    }
+    headers = {
+        "api-key": api_key,
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post("https://sms.arkesel.com/api/v2/sms/send", json=payload, headers=headers)
+
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+
+    if response.status_code >= 400:
+        error_message = body.get("message") or response.text.strip() or f"Arkesel SMS request failed with HTTP {response.status_code}"
+        return False, error_message
+
+    success = bool(body.get("status") in {"success", True} or body.get("success") is True)
+    if success:
+        return True, "SMS sent"
+
+    error_message = body.get("message") or "SMS provider did not confirm delivery"
+    return False, error_message
+
+
+async def send_seller_sms(phone: str, message: str) -> tuple[bool, str]:
+    provider = _sms_provider()
+    if provider in {"", "none", "disabled", "manual"}:
+        return False, "SMS provider is not configured"
+
+    if provider == "arkesel":
+        return await _send_sms_with_arkesel(phone, message)
+
+    return False, f"Unsupported SMS provider: {provider}"
+
+
 def _build_checkout_email(mobile_number: str) -> str:
     digits = "".join(ch for ch in mobile_number if ch.isdigit())
     if not digits:
@@ -322,7 +383,7 @@ async def retry_payment_by_reference(reference: str, db: Session = Depends(get_d
 
 
 @router.post("/{reference}/notify-seller", response_model=SellerNotificationResponse)
-def notify_seller_after_manual_transfer(reference: str, payload: SellerNotificationRequest, db: Session = Depends(get_db)):
+async def notify_seller_after_manual_transfer(reference: str, payload: SellerNotificationRequest, db: Session = Depends(get_db)):
     payment = db.query(PaymentModel).filter(PaymentModel.reference == reference).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment reference not found")
@@ -348,13 +409,16 @@ def notify_seller_after_manual_transfer(reference: str, payload: SellerNotificat
     default_message = f"You have received a payment of GHS {seller_amount:.2f} from agrosharaga.com."
     message = (payload.message or default_message).strip()
 
+    sent, sms_detail = await send_seller_sms(seller_phone, message)
+    detail = "SMS sent to seller successfully." if sent else f"SMS not sent automatically: {sms_detail}. Send this message manually to the seller phone."
+
     return SellerNotificationResponse(
         reference=payment.reference,
         seller_phone=seller_phone,
         seller_amount=seller_amount,
         message=message,
-        sent=False,
-        detail="SMS gateway is not configured. Send this message manually to the seller phone.",
+        sent=sent,
+        detail=detail,
     )
 
 class PaymentWebhook(BaseModel):
