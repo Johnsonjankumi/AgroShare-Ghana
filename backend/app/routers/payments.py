@@ -143,7 +143,7 @@ async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool,
     payload = {
         "username": username,
         "message": message,
-        "phoneNumbers": recipient,
+        "to": recipient,
     }
     if sender_id:
         payload["from"] = sender_id
