@@ -129,6 +129,56 @@ async def _send_sms_with_hubtel(phone: str, message: str) -> tuple[bool, str]:
     return False, error_message
 
 
+async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool, str]:
+    api_key = os.getenv("AFRICASTALKING_API_KEY", "").strip()
+    username = os.getenv("AFRICASTALKING_USERNAME", "sandbox").strip()
+    sender_id = os.getenv("AFRICASTALKING_SENDER_ID", "").strip()
+    if not api_key:
+        return False, "AFRICASTALKING_API_KEY is not configured"
+
+    recipient = _normalize_phone_for_ghana(phone)
+    if recipient.startswith("233"):
+        recipient = "+" + recipient
+
+    payload = {
+        "username": username,
+        "message": message,
+        "phoneNumbers": recipient,
+    }
+    if sender_id:
+        payload["from"] = sender_id
+
+    headers = {
+        "apiKey": api_key,
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post("https://api.africastalking.com/version1/messaging", data=payload, headers=headers)
+
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+
+    if response.status_code >= 400:
+        error_message = body.get("SMSMessageData", {}).get("Message") or response.text.strip() or f"Africa's Talking SMS request failed with HTTP {response.status_code}"
+        return False, error_message
+
+    recipients = body.get("SMSMessageData", {}).get("Recipients") or []
+    if recipients:
+        first = recipients[0]
+        status = str(first.get("status") or "").strip().lower()
+        code = int(first.get("statusCode", 0)) if str(first.get("statusCode", "")).isdigit() else 0
+        if status == "success" or code == 101:
+            return True, body.get("SMSMessageData", {}).get("Message") or "SMS sent"
+        return False, first.get("status") or first.get("statusDescription") or "SMS provider did not confirm delivery"
+
+    high_level_message = body.get("SMSMessageData", {}).get("Message") or "No recipient status returned"
+    return False, high_level_message
+
+
 async def send_seller_sms(phone: str, message: str) -> tuple[bool, str]:
     provider = _sms_provider()
     if provider in {"", "none", "disabled", "manual"}:
@@ -136,6 +186,9 @@ async def send_seller_sms(phone: str, message: str) -> tuple[bool, str]:
 
     if provider == "hubtel":
         return await _send_sms_with_hubtel(phone, message)
+
+    if provider in {"africastalking", "africas_talking", "at"}:
+        return await _send_sms_with_africastalking(phone, message)
 
     return False, f"Unsupported SMS provider: {provider}"
 
