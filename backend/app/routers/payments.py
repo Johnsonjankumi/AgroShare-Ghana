@@ -136,6 +136,9 @@ async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool,
     if not api_key:
         return False, "AFRICASTALKING_API_KEY is not configured"
 
+    if username.lower() == "sandbox":
+        return False, "Africa's Talking is running in sandbox mode. Sandbox does not deliver real SMS to live phones"
+
     recipient = _normalize_phone_for_ghana(phone)
     if recipient.startswith("233"):
         recipient = "+" + recipient
@@ -155,8 +158,6 @@ async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool,
     }
 
     endpoint = "https://api.africastalking.com/version1/messaging"
-    if username.lower() == "sandbox":
-        endpoint = "https://api.sandbox.africastalking.com/version1/messaging"
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.post(endpoint, data=payload, headers=headers)
@@ -175,9 +176,12 @@ async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool,
         first = recipients[0]
         status = str(first.get("status") or "").strip().lower()
         code = int(first.get("statusCode", 0)) if str(first.get("statusCode", "")).isdigit() else 0
+        number = first.get("number") or recipient
+        message_id = first.get("messageId") or "n/a"
         if status == "success" or code == 101:
-            return True, body.get("SMSMessageData", {}).get("Message") or "SMS sent"
-        return False, first.get("status") or first.get("statusDescription") or "SMS provider did not confirm delivery"
+            provider_msg = body.get("SMSMessageData", {}).get("Message") or "SMS accepted by provider"
+            return True, f"{provider_msg}; recipient={number}; messageId={message_id}; status={first.get('status') or 'unknown'}"
+        return False, first.get("status") or first.get("statusDescription") or "SMS provider did not confirm recipient acceptance"
 
     high_level_message = body.get("SMSMessageData", {}).get("Message") or "No recipient status returned"
     return False, high_level_message
@@ -473,7 +477,7 @@ async def notify_seller_after_manual_transfer(reference: str, payload: SellerNot
     message = (payload.message or default_message).strip()
 
     sent, sms_detail = await send_seller_sms(seller_phone, message)
-    detail = "SMS sent to seller successfully." if sent else f"SMS not sent automatically: {sms_detail}. Send this message manually to the seller phone."
+    detail = f"SMS sent to seller successfully. {sms_detail}" if sent else f"SMS not sent automatically: {sms_detail}. Send this message manually to the seller phone."
 
     return SellerNotificationResponse(
         reference=payment.reference,
