@@ -154,8 +154,12 @@ async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool,
         "Content-Type": "application/x-www-form-urlencoded",
     }
 
+    endpoint = "https://api.africastalking.com/version1/messaging"
+    if username.lower() == "sandbox":
+        endpoint = "https://api.sandbox.africastalking.com/version1/messaging"
+
     async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post("https://api.africastalking.com/version1/messaging", data=payload, headers=headers)
+        response = await client.post(endpoint, data=payload, headers=headers)
 
     try:
         body = response.json()
