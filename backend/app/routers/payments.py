@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import os
 import uuid
+import base64
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 from typing import List
@@ -86,25 +87,31 @@ def _normalize_phone_for_ghana(phone: str) -> str:
     return digits
 
 
-async def _send_sms_with_arkesel(phone: str, message: str) -> tuple[bool, str]:
-    api_key = os.getenv("ARKESEL_API_KEY", "").strip()
-    sender = os.getenv("ARKESEL_SENDER_ID", "AgroShare")
-    if not api_key:
-        return False, "ARKESEL_API_KEY is not configured"
+async def _send_sms_with_hubtel(phone: str, message: str) -> tuple[bool, str]:
+    client_id = os.getenv("HUBTEL_CLIENT_ID", "").strip()
+    client_secret = os.getenv("HUBTEL_CLIENT_SECRET", "").strip()
+    sender = os.getenv("HUBTEL_SENDER_ID", "AgroShare")
+    if not client_id or not client_secret:
+        return False, "HUBTEL_CLIENT_ID or HUBTEL_CLIENT_SECRET is not configured"
 
     recipient = _normalize_phone_for_ghana(phone)
+    if recipient.startswith("233"):
+        recipient = "+" + recipient
+
+    credentials = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("utf-8")
     payload = {
-        "sender": sender,
-        "message": message,
-        "recipients": [recipient],
+        "From": sender,
+        "To": recipient,
+        "Content": message,
+        "RegisteredDelivery": True,
     }
     headers = {
-        "api-key": api_key,
+        "Authorization": f"Basic {credentials}",
         "Content-Type": "application/json",
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post("https://sms.arkesel.com/api/v2/sms/send", json=payload, headers=headers)
+        response = await client.post("https://sms-api.hubtel.com/v1/messages/send", json=payload, headers=headers)
 
     try:
         body = response.json()
@@ -112,14 +119,13 @@ async def _send_sms_with_arkesel(phone: str, message: str) -> tuple[bool, str]:
         body = {}
 
     if response.status_code >= 400:
-        error_message = body.get("message") or response.text.strip() or f"Arkesel SMS request failed with HTTP {response.status_code}"
+        error_message = body.get("Message") or response.text.strip() or f"Hubtel SMS request failed with HTTP {response.status_code}"
         return False, error_message
 
-    success = bool(body.get("status") in {"success", True} or body.get("success") is True)
-    if success:
-        return True, "SMS sent"
+    if str(body.get("Status", "")).strip() == "0":
+        return True, body.get("Message") or "SMS sent"
 
-    error_message = body.get("message") or "SMS provider did not confirm delivery"
+    error_message = body.get("Message") or "SMS provider did not confirm delivery"
     return False, error_message
 
 
@@ -128,8 +134,8 @@ async def send_seller_sms(phone: str, message: str) -> tuple[bool, str]:
     if provider in {"", "none", "disabled", "manual"}:
         return False, "SMS provider is not configured"
 
-    if provider == "arkesel":
-        return await _send_sms_with_arkesel(phone, message)
+    if provider == "hubtel":
+        return await _send_sms_with_hubtel(phone, message)
 
     return False, f"Unsupported SMS provider: {provider}"
 
