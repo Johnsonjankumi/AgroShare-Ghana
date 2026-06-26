@@ -388,6 +388,37 @@ function App() {
     showNotice('success', `✅ ${data.detail}`);
   };
 
+  const sendSellerSmsForPayment = async payment => {
+    const amountInput = window.prompt('Enter amount you sent to seller (GHS):', '');
+    if (amountInput === null) return;
+    const sellerAmount = Number(amountInput);
+    if (!Number.isFinite(sellerAmount) || sellerAmount <= 0) {
+      showNotice('error', 'Enter a valid seller amount greater than 0.');
+      return;
+    }
+
+    const sellerPhoneInput = window.prompt('Enter seller phone (optional). Leave blank to auto-detect from booking owner:', '');
+    if (sellerPhoneInput === null) return;
+
+    const payload = { seller_amount: sellerAmount };
+    if (sellerPhoneInput.trim()) {
+      payload.seller_phone = sellerPhoneInput.trim();
+    }
+
+    const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(payment.reference)}/notify-seller`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showNotice('error', data.detail || 'Unable to send seller SMS.');
+      return;
+    }
+
+    showNotice(data.sent ? 'success' : 'error', `${data.detail} Message: ${data.message}`);
+  };
+
   const sendUssd = async e => {
     e.preventDefault();
     const res = await fetch(`${API_BASE}/ussd/`, {
@@ -727,6 +758,9 @@ function App() {
                 <div style={{ color: '#777', wordBreak: 'break-all' }}>{payment.reference}</div>
                 {payment.status !== 'released' && (
                   <button type="button" onClick={() => releasePayment(payment.id)} style={{ marginTop: 6, background: '#2e7d32' }}>✅ {t('complete')}</button>
+                )}
+                {payment.status === 'paid' && (
+                  <button type="button" onClick={() => sendSellerSmsForPayment(payment)} style={{ marginTop: 6, background: '#1769aa' }}>📩 Send seller SMS</button>
                 )}
               </div>
             )) : <p style={{ color: '#888' }}>{t('noPayments')}</p>}
