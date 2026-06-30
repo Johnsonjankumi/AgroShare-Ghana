@@ -136,8 +136,12 @@ async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool,
     if not api_key:
         return False, "AFRICASTALKING_API_KEY is not configured"
 
-    if username.lower() == "sandbox":
-        return False, "Africa's Talking is running in sandbox mode. Sandbox does not deliver real SMS to live phones"
+    is_sandbox = username.lower() == "sandbox"
+    endpoint = (
+        "https://api.sandbox.africastalking.com/version1/messaging"
+        if is_sandbox
+        else "https://api.africastalking.com/version1/messaging"
+    )
 
     recipient = _normalize_phone_for_ghana(phone)
     if recipient.startswith("233"):
@@ -156,8 +160,6 @@ async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool,
         "Accept": "application/json",
         "Content-Type": "application/x-www-form-urlencoded",
     }
-
-    endpoint = "https://api.africastalking.com/version1/messaging"
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.post(endpoint, data=payload, headers=headers)
@@ -452,19 +454,28 @@ async def retry_payment_by_reference(reference: str, db: Session = Depends(get_d
 @router.post("/{reference}/notify-seller", response_model=SellerNotificationResponse)
 async def notify_seller_after_manual_transfer(reference: str, payload: SellerNotificationRequest, db: Session = Depends(get_db)):
     payment = db.query(PaymentModel).filter(PaymentModel.reference == reference).first()
-    if not payment:
+    
+    # Allow SMS testing without payment existing (for sandbox/testing)
+    allow_sms_test = os.getenv("ALLOW_SMS_TEST_WITHOUT_PAYMENT", "false").lower() in {"1", "true", "yes", "on"}
+    
+    if not payment and not allow_sms_test:
         raise HTTPException(status_code=404, detail="Payment reference not found")
 
-    booking = db.query(BookingModel).filter(BookingModel.id == payment.booking_id).first()
-    if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found for payment")
+    booking = None
+    equipment = None
+    
+    # Only fetch booking/equipment if payment exists
+    if payment:
+        booking = db.query(BookingModel).filter(BookingModel.id == payment.booking_id).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found for payment")
 
-    equipment = db.query(EquipmentModel).filter(EquipmentModel.id == booking.equipment_id).first()
-    if not equipment:
-        raise HTTPException(status_code=404, detail="Equipment not found for booking")
+        equipment = db.query(EquipmentModel).filter(EquipmentModel.id == booking.equipment_id).first()
+        if not equipment:
+            raise HTTPException(status_code=404, detail="Equipment not found for booking")
 
     seller_phone = (payload.seller_phone or "").strip()
-    if not seller_phone and equipment.owner_farmer_id:
+    if not seller_phone and equipment and equipment.owner_farmer_id:
         owner_farmer = db.query(FarmerModel).filter(FarmerModel.id == equipment.owner_farmer_id).first()
         if owner_farmer and owner_farmer.phone:
             seller_phone = owner_farmer.phone.strip()
@@ -472,7 +483,7 @@ async def notify_seller_after_manual_transfer(reference: str, payload: SellerNot
     if not seller_phone:
         raise HTTPException(status_code=400, detail="Seller phone not found. Provide seller_phone in request body.")
 
-    seller_amount = round(float(payload.seller_amount if payload.seller_amount is not None else equipment.price_per_day), 2)
+    seller_amount = round(float(payload.seller_amount if payload.seller_amount is not None else (equipment.price_per_day if equipment else 0)), 2)
     default_message = f"You have received a payment of GHS {seller_amount:.2f} from agrosharaga.com."
     message = (payload.message or default_message).strip()
 
@@ -480,7 +491,7 @@ async def notify_seller_after_manual_transfer(reference: str, payload: SellerNot
     detail = f"SMS sent to seller successfully. {sms_detail}" if sent else f"SMS not sent automatically: {sms_detail}. Send this message manually to the seller phone."
 
     return SellerNotificationResponse(
-        reference=payment.reference,
+        reference=reference if not payment else payment.reference,
         seller_phone=seller_phone,
         seller_amount=seller_amount,
         message=message,
