@@ -3,6 +3,7 @@ import hmac
 import os
 import uuid
 import base64
+import json
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 from typing import List
@@ -43,6 +44,7 @@ class RetryPaymentResponse(BaseModel):
 
 class SellerNotificationRequest(BaseModel):
     seller_phone: str | None = None
+    seller_email: str | None = None
     seller_amount: float | None = None
     message: str | None = None
 
@@ -201,6 +203,46 @@ async def send_seller_sms(phone: str, message: str) -> tuple[bool, str]:
         return await _send_sms_with_africastalking(phone, message)
 
     return False, f"Unsupported SMS provider: {provider}"
+
+
+async def send_seller_email(email: str, subject: str, html_body: str) -> tuple[bool, str]:
+    """Send email via Brevo (formerly Sendinblue). Returns (success, detail_message)"""
+    api_key = os.getenv("BREVO_API_KEY", "").strip()
+    if not api_key:
+        return False, "BREVO_API_KEY is not configured. Email notifications disabled."
+    
+    sender_email = os.getenv("BREVO_SENDER_EMAIL", "noreply@agrosharaga.com").strip()
+    sender_name = os.getenv("BREVO_SENDER_NAME", "AgroShare Ghana").strip()
+    
+    payload = {
+        "sender": {
+            "name": sender_name,
+            "email": sender_email,
+        },
+        "to": [{"email": email}],
+        "subject": subject,
+        "htmlContent": html_body,
+    }
+    
+    headers = {
+        "api-key": api_key,
+        "Content-Type": "application/json",
+    }
+    
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post("https://api.brevo.com/v3/smtp/email", json=payload, headers=headers)
+    
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    
+    if response.status_code >= 400:
+        error_msg = body.get("message") or body.get("error") or response.text.strip() or f"Brevo request failed with HTTP {response.status_code}"
+        return False, error_msg
+    
+    message_id = body.get("messageId") or "unknown"
+    return True, f"Email sent successfully (ID: {message_id})"
 
 
 def _build_checkout_email(mobile_number: str) -> str:
@@ -487,15 +529,50 @@ async def notify_seller_after_manual_transfer(reference: str, payload: SellerNot
     default_message = f"You have received a payment of GHS {seller_amount:.2f} from agrosharaga.com."
     message = (payload.message or default_message).strip()
 
-    sent, sms_detail = await send_seller_sms(seller_phone, message)
-    detail = f"SMS sent to seller successfully. {sms_detail}" if sent else f"SMS not sent automatically: {sms_detail}. Send this message manually to the seller phone."
+    # Try to get seller email
+    seller_email = (payload.seller_email or "").strip()
+    if not seller_email and equipment and equipment.owner_farmer_id:
+        owner_farmer = db.query(FarmerModel).filter(FarmerModel.id == equipment.owner_farmer_id).first()
+        if owner_farmer and owner_farmer.email:
+            seller_email = owner_farmer.email.strip()
+
+    # Send SMS
+    sms_sent, sms_detail = await send_seller_sms(seller_phone, message)
+    
+    # Try to send email as complement/fallback
+    email_sent = False
+    email_detail = "Email provider not configured"
+    if seller_email:
+        email_html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2>Payment Notification</h2>
+                <p>You have received a payment of <strong>GHS {seller_amount:.2f}</strong> from AgroShare Ghana (agrosharaga.com).</p>
+                <p>Thank you for using our platform to share equipment with farmers in your community.</p>
+                <p>Best regards,<br>AgroShare Ghana Team</p>
+            </body>
+        </html>
+        """
+        email_sent, email_detail = await send_seller_email(seller_email, "Payment Received - AgroShare Ghana", email_html)
+    
+    # Determine overall detail message
+    if sms_sent and email_sent:
+        detail = f"Payment notification sent via SMS and email successfully."
+    elif sms_sent:
+        detail = f"SMS sent successfully. {sms_detail}"
+        if not os.getenv("BREVO_API_KEY"):
+            detail += " (Email not configured)"
+    elif email_sent:
+        detail = f"Email sent successfully. SMS failed: {sms_detail}"
+    else:
+        detail = f"SMS failed: {sms_detail}" + (f" Email failed: {email_detail}" if seller_email else " (No email configured)")
 
     return SellerNotificationResponse(
         reference=reference if not payment else payment.reference,
         seller_phone=seller_phone,
         seller_amount=seller_amount,
         message=message,
-        sent=sent,
+        sent=sms_sent or email_sent,
         detail=detail,
     )
 

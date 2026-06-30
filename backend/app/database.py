@@ -97,6 +97,7 @@ class Farmer(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     phone = Column(String, unique=True, index=True)
+    email = Column(String, nullable=True, unique=True, index=True)  # Email for notifications
     district = Column(String, index=True)
     latitude = Column(Float, nullable=True)  # GPS location
     longitude = Column(Float, nullable=True)  # GPS location
