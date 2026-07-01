@@ -24,7 +24,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://agroshare-frontend.onrender.com
+        value: https://agroshare-frontend.onrender.com,https://agroshare-api-g7ze.onrender.com
       - key: EXPOSE_API_DOCS
         value: "false"
       - key: PAYSTACK_WEBHOOK_SECRET
