@@ -252,8 +252,6 @@ const translations = {
     all: 'Nyinaa',
   },
 };
-  },
-};
 
 function App() {
   const [lang, setLang] = useState('en');
