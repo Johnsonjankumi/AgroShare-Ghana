@@ -101,6 +101,34 @@ const translations = {
     allRatings: 'All ratings',
     review: 'review',
     noReviewsMatch: 'No reviews match the selected filter.',
+    adminPanel: 'Admin Dashboard',
+    adminPassword: 'Admin Password',
+    adminLogin: 'Admin Login',
+    adminLogout: 'Logout',
+    adminDashboard: 'Dashboard',
+    dashboardStats: 'Platform Statistics',
+    totalFarmers: 'Total Farmers',
+    totalEquipment: 'Total Equipment',
+    totalBookings: 'Total Bookings',
+    totalPayments: 'Total Payments',
+    totalRevenue: 'Total Revenue (GHS)',
+    completedPayments: 'Completed Payments',
+    pendingBookings: 'Pending Bookings',
+    averagePrice: 'Avg Equipment Price (GHS)',
+    bookingManagement: 'Booking Management',
+    paymentManagement: 'Payment Management',
+    disputeResolution: 'Dispute Resolution',
+    filterBookings: 'Filter Bookings',
+    filterPayments: 'Filter Payments',
+    bookingId: 'Booking ID',
+    status: 'Status',
+    amount: 'Amount',
+    method: 'Method',
+    processRefund: 'Process Refund',
+    refundReason: 'Refund Reason',
+    noBookings: 'No bookings found.',
+    noPayments: 'No payments found.',
+    all: 'All',
   },
   twi: {
     title: 'AgroShare Ghana',
@@ -194,6 +222,36 @@ const translations = {
     allRatings: 'Dɔm nyinaa',
     review: 'nkyerɛmu',
     noReviewsMatch: 'Nkyerɛmu biara nni wɔ wʼakɔnnɔ no mu. Prɔ sɛ wobɔ wo akɔnnɔ no mu.',
+    adminPanel: 'Sikabɔfo Dashboard',
+    adminPassword: 'Sikabɔfo Gyinae',
+    adminLogin: 'Sikabɔfo Login',
+    adminLogout: 'Tui Ɔman',
+    adminDashboard: 'Dashboard',
+    dashboardStats: 'Platform Tidings',
+    totalFarmers: 'Afuwfoɔ Sum',
+    totalEquipment: 'Akode Sum',
+    totalBookings: 'Bere Sum',
+    totalPayments: 'Sika bobɔ Sum',
+    totalRevenue: 'Sika Sum (GHS)',
+    completedPayments: 'Sika bobɔ a wie',
+    pendingBookings: 'Bere a wɔretwɛn',
+    averagePrice: 'Akode Boɔ Duru (GHS)',
+    bookingManagement: 'Bere Susufa',
+    paymentManagement: 'Sika bobɔ Susufa',
+    disputeResolution: 'Asɛm Pagyefo',
+    filterBookings: 'Fa wɔ Bere mu',
+    filterPayments: 'Fa wɔ Sika bobɔ mu',
+    bookingId: 'Bere ID',
+    status: 'Status',
+    amount: 'Sika',
+    method: 'Akwan',
+    processRefund: 'Fa Sika Pam',
+    refundReason: 'Ntwam',
+    noBookings: 'Bere biara nni hɔ.',
+    noPayments: 'Sika bobɔ biara nni hɔ.',
+    all: 'Nyinaa',
+  },
+};
   },
 };
 
@@ -255,6 +313,16 @@ function App() {
   
   // Phase 4: Ratings filter state
   const [minRatingFilter, setMinRatingFilter] = useState(0);
+  
+  // Phase 5: Admin Dashboard states
+  const [isAdminView, setIsAdminView] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(localStorage.getItem('adminAuth') === 'true');
+  const [adminBookingFilter, setAdminBookingFilter] = useState('all'); // all, pending, complete
+  const [adminPaymentFilter, setAdminPaymentFilter] = useState('all'); // all, pending, complete, failed
+  const [adminSelectedBooking, setAdminSelectedBooking] = useState(null);
+  const [adminRefundForm, setAdminRefundForm] = useState({ booking_id: '', reason: '' });
+  const [isAdminProcessingRefund, setIsAdminProcessingRefund] = useState(false);
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -768,6 +836,84 @@ function App() {
     return '⭐'.repeat(Math.floor(rating)) + (rating % 1 >= 0.5 ? '✨' : '');
   };
 
+  // Phase 5: Admin Dashboard Functions
+  const handleAdminLogin = (e) => {
+    e.preventDefault();
+    // Simple password check (in production, use proper authentication)
+    if (adminPassword === 'agroadmin2024') {
+      setIsAdminAuthenticated(true);
+      localStorage.setItem('adminAuth', 'true');
+      setAdminPassword('');
+      showNotice('success', '✅ Admin access granted!');
+    } else {
+      showNotice('error', '❌ Incorrect admin password');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    localStorage.removeItem('adminAuth');
+    setIsAdminView(false);
+    showNotice('success', '✅ Logged out from admin panel');
+  };
+
+  // Phase 5: Calculate dashboard statistics
+  const getDashboardStats = () => {
+    const totalRevenue = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    const completedPayments = payments.filter(p => p.status === 'completed').length;
+    const pendingBookings = rentalPools.filter(p => p.status === 'pending').length;
+    return {
+      totalFarmers: farmers.length,
+      totalEquipment: equipment.length,
+      totalBookings: rentalPools.length,
+      totalPayments: payments.length,
+      totalRevenue: totalRevenue.toFixed(2),
+      completedPayments,
+      pendingBookings,
+      averageEquipmentPrice: equipment.length > 0 ? (equipment.reduce((s, e) => s + (parseFloat(e.price_per_day) || 0), 0) / equipment.length).toFixed(2) : 0
+    };
+  };
+
+  // Phase 5: Get filtered bookings for admin
+  const getAdminFilteredBookings = () => {
+    if (adminBookingFilter === 'all') return rentalPools;
+    return rentalPools.filter(b => b.status === adminBookingFilter);
+  };
+
+  // Phase 5: Get filtered payments for admin
+  const getAdminFilteredPayments = () => {
+    if (adminPaymentFilter === 'all') return payments;
+    return payments.filter(p => p.status === adminPaymentFilter);
+  };
+
+  // Phase 5: Process refund
+  const processAdminRefund = async (e) => {
+    e.preventDefault();
+    if (!adminRefundForm.booking_id || !adminRefundForm.reason) {
+      showNotice('error', '❌ Please fill all refund fields');
+      return;
+    }
+    
+    setIsAdminProcessingRefund(true);
+    try {
+      // Simulate refund processing
+      const refundData = {
+        booking_id: adminRefundForm.booking_id,
+        reason: adminRefundForm.reason,
+        processed_by: 'admin',
+        processed_at: new Date().toISOString()
+      };
+      
+      // In production, send to backend API
+      showNotice('success', `✅ Refund processed for booking ${adminRefundForm.booking_id}`);
+      setAdminRefundForm({ booking_id: '', reason: '' });
+    } catch (err) {
+      showNotice('error', '❌ Failed to process refund: ' + err.message);
+    } finally {
+      setIsAdminProcessingRefund(false);
+    }
+  };
+
   const card = { padding: 18, border: '1px solid #ddd', borderRadius: 12, background: 'rgba(255,255,255,0.97)' };
 
   return (
@@ -801,14 +947,47 @@ function App() {
             <h1 style={{ color: '#0d4a1f', marginBottom: 4, fontSize: '1.5rem' }}>🌾 {t('title')}</h1>
             <p style={{ margin: 0, color: '#444', fontSize: '0.9rem' }}>{t('subtitle')}</p>
           </div>
-          <label style={{ margin: 0 }}>
-            {t('language')}:<br />
-            <select value={lang} onChange={e => setLang(e.target.value)} style={{ marginTop: 4, width: 'auto' }}>
-              <option value="en">English</option>
-              <option value="twi">Twi</option>
-            </select>
-          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <label style={{ margin: 0 }}>
+              {t('language')}:<br />
+              <select value={lang} onChange={e => setLang(e.target.value)} style={{ marginTop: 4, width: 'auto' }}>
+                <option value="en">English</option>
+                <option value="twi">Twi</option>
+              </select>
+            </label>
+            {/* Phase 5: Admin Access */}
+            {isAdminAuthenticated ? (
+              <button onClick={handleAdminLogout} style={{ padding: '8px 12px', background: '#d32f2f', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.85rem' }}>
+                🔐 {t('adminLogout')}
+              </button>
+            ) : (
+              <button onClick={() => setIsAdminView(!isAdminView)} style={{ padding: '8px 12px', background: '#1769aa', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.85rem' }}>
+                🔐 {t('adminPanel')}
+              </button>
+            )}
+          </div>
         </div>
+        
+        {/* Phase 5: Admin Login Form */}
+        {isAdminView && !isAdminAuthenticated && (
+          <form onSubmit={handleAdminLogin} style={{ marginTop: 12, padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <label style={{ flex: 1 }}>
+                {t('adminPassword')}<br />
+                <input 
+                  type="password" 
+                  value={adminPassword}
+                  onChange={e => setAdminPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  style={{ width: '100%', marginTop: 4 }}
+                />
+              </label>
+              <button type="submit" style={{ padding: '8px 16px', background: '#1769aa', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                {t('adminLogin')}
+              </button>
+            </div>
+          </form>
+        )}
       </header>
 
       {/* ── How it Works ── */}
@@ -1451,6 +1630,149 @@ function App() {
           </div>
         )}
       </section>
+
+      {/* Phase 5: Admin Dashboard */}
+      {isAdminAuthenticated && (
+        <>
+          {/* Admin Navigation Tabs */}
+          <section style={{ marginBottom: 14, background: 'rgba(23, 105, 170, 0.1)', borderRadius: 14, padding: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => setIsAdminView('dashboard')} style={{ padding: '8px 12px', background: isAdminView === 'dashboard' ? '#1769aa' : '#ddd', color: isAdminView === 'dashboard' ? 'white' : '#333', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.9rem' }}>
+                📊 {t('adminDashboard')}
+              </button>
+              <button onClick={() => setIsAdminView('bookings')} style={{ padding: '8px 12px', background: isAdminView === 'bookings' ? '#1769aa' : '#ddd', color: isAdminView === 'bookings' ? 'white' : '#333', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.9rem' }}>
+                📅 {t('bookingManagement')}
+              </button>
+              <button onClick={() => setIsAdminView('payments')} style={{ padding: '8px 12px', background: isAdminView === 'payments' ? '#1769aa' : '#ddd', color: isAdminView === 'payments' ? 'white' : '#333', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.9rem' }}>
+                💳 {t('paymentManagement')}
+              </button>
+              <button onClick={() => setIsAdminView('disputes')} style={{ padding: '8px 12px', background: isAdminView === 'disputes' ? '#1769aa' : '#ddd', color: isAdminView === 'disputes' ? 'white' : '#333', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.9rem' }}>
+                ⚖️ {t('disputeResolution')}
+              </button>
+            </div>
+          </section>
+
+          {/* Dashboard View */}
+          {isAdminView === 'dashboard' && (
+            <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+              <h2 style={{ marginTop: 0 }}>📊 {t('dashboardStats')}</h2>
+              {(() => {
+                const stats = getDashboardStats();
+                return (
+                  <div className="grid-2">
+                    <div style={{ padding: 16, background: '#e3f2fd', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1769aa' }}>{stats.totalFarmers}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>{t('totalFarmers')}</div>
+                    </div>
+                    <div style={{ padding: 16, background: '#f3e5f5', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: '2rem', fontWeight: 700, color: '#7b1fa2' }}>{stats.totalEquipment}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>{t('totalEquipment')}</div>
+                    </div>
+                    <div style={{ padding: 16, background: '#e8f5e9', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: '2rem', fontWeight: 700, color: '#10a760' }}>{stats.totalBookings}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>{t('totalBookings')}</div>
+                    </div>
+                    <div style={{ padding: 16, background: '#fff3e0', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f57c00' }}>{stats.totalPayments}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>{t('totalPayments')}</div>
+                    </div>
+                    <div style={{ padding: 16, background: '#fce4ec', borderRadius: 8, textAlign: 'center', gridColumn: '1 / -1' }}>
+                      <div style={{ fontSize: '2.5rem', fontWeight: 700, color: '#c2185b' }}>GHS {stats.totalRevenue}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>{t('totalRevenue')}</div>
+                    </div>
+                    <div style={{ padding: 16, background: '#e0f2f1', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#00796b' }}>{stats.completedPayments}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>{t('completedPayments')}</div>
+                    </div>
+                    <div style={{ padding: 16, background: '#ffebee', borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#d32f2f' }}>{stats.pendingBookings}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>{t('pendingBookings')}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </section>
+          )}
+
+          {/* Bookings Management View */}
+          {isAdminView === 'bookings' && (
+            <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+              <h2 style={{ marginTop: 0 }}>📅 {t('bookingManagement')}</h2>
+              <label style={{ marginBottom: 12, display: 'block' }}>
+                {t('filterBookings')}:<br />
+                <select value={adminBookingFilter} onChange={e => setAdminBookingFilter(e.target.value)} style={{ marginTop: 6 }}>
+                  <option value="all">{t('all')}</option>
+                  <option value="pending">{t('pending')}</option>
+                  <option value="complete">{t('complete')}</option>
+                </select>
+              </label>
+              <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid #ddd', borderRadius: 8, marginBottom: 12 }}>
+                {getAdminFilteredBookings().length > 0 ? getAdminFilteredBookings().map(booking => (
+                  <div key={booking.id} style={{ padding: 12, borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => setAdminSelectedBooking(booking)}>
+                    <div style={{ fontWeight: 600 }}>Booking #{booking.id}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#666' }}>Equipment: {booking.equipment_id} | Status: {booking.status}</div>
+                  </div>
+                )) : <div style={{ padding: 12, textAlign: 'center', color: '#999' }}>{t('noBookings')}</div>}
+              </div>
+              {adminSelectedBooking && (
+                <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
+                  <strong>Selected Booking Details:</strong>
+                  <div style={{ fontSize: '0.85rem', marginTop: 8 }}>
+                    <div>ID: {adminSelectedBooking.id}</div>
+                    <div>Farmer: {adminSelectedBooking.farmer_id}</div>
+                    <div>Equipment: {adminSelectedBooking.equipment_id}</div>
+                    <div>Rental Date: {adminSelectedBooking.rental_date}</div>
+                    <div>Status: {adminSelectedBooking.status}</div>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Payments Management View */}
+          {isAdminView === 'payments' && (
+            <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+              <h2 style={{ marginTop: 0 }}>💳 {t('paymentManagement')}</h2>
+              <label style={{ marginBottom: 12, display: 'block' }}>
+                {t('filterPayments')}:<br />
+                <select value={adminPaymentFilter} onChange={e => setAdminPaymentFilter(e.target.value)} style={{ marginTop: 6 }}>
+                  <option value="all">{t('all')}</option>
+                  <option value="pending">{t('pending')}</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </label>
+              <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid #ddd', borderRadius: 8 }}>
+                {getAdminFilteredPayments().length > 0 ? getAdminFilteredPayments().map(payment => (
+                  <div key={payment.id} style={{ padding: 12, borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Ref: {payment.reference}</div>
+                      <div style={{ fontSize: '0.85rem', color: '#666' }}>Amount: GHS {payment.amount} | Method: {payment.method}</div>
+                    </div>
+                    <div style={{ fontSize: '0.85rem', padding: '4px 8px', background: payment.status === 'completed' ? '#c8e6c9' : '#ffccbc', borderRadius: 4 }}>
+                      {payment.status}
+                    </div>
+                  </div>
+                )) : <div style={{ padding: 12, textAlign: 'center', color: '#999' }}>{t('noPayments')}</div>}
+              </div>
+            </section>
+          )}
+
+          {/* Dispute Resolution View */}
+          {isAdminView === 'disputes' && (
+            <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+              <h2 style={{ marginTop: 0 }}>⚖️ {t('disputeResolution')}</h2>
+              <form onSubmit={processAdminRefund} style={{ maxWidth: 560 }}>
+                <label>{t('bookingId')}<br /><input type="text" value={adminRefundForm.booking_id} onChange={e => setAdminRefundForm(f => ({ ...f, booking_id: e.target.value }))} required /></label>
+                <label>{t('refundReason')}<br /><textarea rows={4} value={adminRefundForm.reason} onChange={e => setAdminRefundForm(f => ({ ...f, reason: e.target.value }))} required /></label>
+                <button type="submit" disabled={isAdminProcessingRefund} style={{ marginTop: 12, padding: '10px 16px', background: '#d32f2f', color: 'white', border: 'none', borderRadius: 6, cursor: isAdminProcessingRefund ? 'not-allowed' : 'pointer' }}>
+                  {isAdminProcessingRefund ? 'Processing...' : '💰 ' + t('processRefund')}
+                </button>
+              </form>
+            </section>
+          )}
+        </>
+      )}
 
       <footer style={{ textAlign: 'center', padding: '14px 0', color: 'rgba(255,255,255,0.8)', fontSize: '0.82rem' }}>
         © 2026 AgroShare Ghana · Empowering Ghanaian Farmers

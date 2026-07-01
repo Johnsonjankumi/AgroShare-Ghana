@@ -773,7 +773,138 @@ input.error:focus, textarea.error:focus, select.error:focus {
   margin-bottom: 12px;
 }
 
-.rating-filter select {
-  width: 100%;
-  margin-top: 6px;
+/* ── Phase 5: Admin Dashboard ── */
+.admin-stat-card {
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  text-align: center;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.admin-stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.admin-stat-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.admin-nav-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.admin-nav-tabs button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.admin-nav-tabs button.active {
+  background: var(--primary);
+  color: white;
+}
+
+.admin-nav-tabs button:not(.active) {
+  background: var(--border-light);
+  color: var(--text-primary);
+}
+
+.admin-nav-tabs button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+
+.admin-list-item {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.admin-list-item:hover {
+  background: var(--primary-light);
+}
+
+.admin-list-item-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.admin-list-item-detail {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.admin-status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.admin-status-completed {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.admin-status-pending {
+  background: #ffccbc;
+  color: #d84315;
+}
+
+.admin-status-failed {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.admin-detail-box {
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary);
+}
+
+.admin-detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+}
+
+.admin-detail-row strong {
+  color: var(--text-primary);
+  min-width: 100px;
+}
+
+.admin-detail-row span {
+  color: var(--text-secondary);
+  text-align: right;
 }
