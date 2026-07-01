@@ -94,6 +94,13 @@ const translations = {
     addToFavorites: 'Add to favorites',
     removeFromFavorites: 'Remove from favorites',
     favoritesDescription: 'Equipment you\'ve bookmarked for quick access',
+    ratingsAverage: 'Average Rating',
+    basedOn: 'Based on',
+    reviews: 'reviews',
+    filterByRating: 'Filter by minimum rating',
+    allRatings: 'All ratings',
+    review: 'review',
+    noReviewsMatch: 'No reviews match the selected filter.',
   },
   twi: {
     title: 'AgroShare Ghana',
@@ -180,6 +187,13 @@ const translations = {
     addToFavorites: 'Ka fa favorites so',
     removeFromFavorites: 'Pam fii favorites so',
     favoritesDescription: 'Akode a wokyerɛw ama wo din se woacɔ so',
+    ratingsAverage: 'Dɔm Duru',
+    basedOn: 'Sɛ ɛse',
+    reviews: 'nkyerɛmu',
+    filterByRating: 'Fa wɔ dɔm kɛse mu',
+    allRatings: 'Dɔm nyinaa',
+    review: 'nkyerɛmu',
+    noReviewsMatch: 'Nkyerɛmu biara nni wɔ wʼakɔnnɔ no mu. Prɔ sɛ wobɔ wo akɔnnɔ no mu.',
   },
 };
 
@@ -238,6 +252,9 @@ function App() {
   const [filteredEquipment, setFilteredEquipment] = useState([]);
   const [showAutoComplete, setShowAutoComplete] = useState(false);
   const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('favoriteEquipment')) || []);
+  
+  // Phase 4: Ratings filter state
+  const [minRatingFilter, setMinRatingFilter] = useState(0);
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -722,6 +739,33 @@ function App() {
     if (!farmerId) return;
     const res = await fetch(`${API_BASE}/ratings/farmer/${farmerId}`);
     if (res.ok) { const data = await res.json(); setRatings(data); }
+  };
+
+  // Phase 4: Calculate average rating
+  const calculateAverageRating = (ratingsList = ratings) => {
+    if (ratingsList.length === 0) return 0;
+    const sum = ratingsList.reduce((acc, r) => acc + (r.rating || 0), 0);
+    return (sum / ratingsList.length).toFixed(1);
+  };
+
+  // Phase 4: Get rating distribution
+  const getRatingDistribution = (ratingsList = ratings) => {
+    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    ratingsList.forEach(r => {
+      if (r.rating >= 1 && r.rating <= 5) distribution[r.rating]++;
+    });
+    return distribution;
+  };
+
+  // Phase 4: Filter ratings by minimum stars
+  const getFilteredRatings = (minStars = 0, ratingsList = ratings) => {
+    if (minStars === 0) return ratingsList;
+    return ratingsList.filter(r => r.rating >= minStars);
+  };
+
+  // Phase 4: Star display helper
+  const renderStars = (rating) => {
+    return '⭐'.repeat(Math.floor(rating)) + (rating % 1 >= 0.5 ? '✨' : '');
   };
 
   const card = { padding: 18, border: '1px solid #ddd', borderRadius: 12, background: 'rgba(255,255,255,0.97)' };
@@ -1322,13 +1366,64 @@ function App() {
             </button>
           </form>
           <div>
-            <h3 style={{ marginTop: 0 }}>Farmer reviews</h3>
-            {ratings.length > 0 ? ratings.map(rating => (
-              <div key={rating.id} style={{ padding: 12, marginBottom: 10, border: '1px solid #e0e0e0', borderRadius: 8, background: '#fafafa' }}>
-                <div><strong>{rating.rater_name}</strong> — {'⭐'.repeat(rating.rating)}</div>
-                <div style={{ fontSize: '0.88rem', color: '#555' }}>{rating.review}</div>
-              </div>
-            )) : <p style={{ color: '#888' }}>{t('noRatings')}</p>}
+            <h3 style={{ marginTop: 0 }}>📊 Farmer Reviews ({ratings.length})</h3>
+            
+            {ratings.length > 0 ? (
+              <>
+                {/* Phase 4: Average Rating Display */}
+                <div style={{ background: '#f5f5f5', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1769aa', marginBottom: 4 }}>
+                    {calculateAverageRating()} / 5.0 {renderStars(parseFloat(calculateAverageRating()))}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#666' }}>Based on {ratings.length} {ratings.length === 1 ? 'review' : 'reviews'}</div>
+                </div>
+
+                {/* Phase 4: Rating Distribution */}
+                <div style={{ marginBottom: 12 }}>
+                  {[5, 4, 3, 2, 1].map(stars => {
+                    const count = getRatingDistribution()[stars];
+                    const percentage = ratings.length > 0 ? Math.round((count / ratings.length) * 100) : 0;
+                    return (
+                      <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer' }}>
+                        <div style={{ minWidth: 60, fontSize: '0.85rem' }}>{stars} ⭐</div>
+                        <div style={{ flex: 1, background: '#e0e0e0', height: 20, borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ background: '#1769aa', height: '100%', width: `${percentage}%`, transition: 'width 0.3s' }} />
+                        </div>
+                        <div style={{ minWidth: 50, fontSize: '0.8rem', color: '#666' }}>{count} ({percentage}%)</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Phase 4: Filter by Rating */}
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: '0.85rem', color: '#555' }}>Filter by minimum rating:
+                    <select value={minRatingFilter} onChange={e => setMinRatingFilter(Number(e.target.value))} style={{ display: 'block', marginTop: 6 }}>
+                      <option value="0">All ratings</option>
+                      <option value="5">⭐⭐⭐⭐⭐ 5 stars</option>
+                      <option value="4">⭐⭐⭐⭐ 4+ stars</option>
+                      <option value="3">⭐⭐⭐ 3+ stars</option>
+                      <option value="2">⭐⭐ 2+ stars</option>
+                      <option value="1">⭐ 1+ stars</option>
+                    </select>
+                  </label>
+                </div>
+
+                {/* Phase 4: Reviews List */}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e0e0e0' }}>
+                  {getFilteredRatings(minRatingFilter).length > 0 ? getFilteredRatings(minRatingFilter).map(rating => (
+                    <div key={rating.id} style={{ padding: 12, marginBottom: 10, border: '1px solid #e0e0e0', borderRadius: 8, background: '#fafafa' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <strong>{rating.rater_name}</strong>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1769aa' }}>{renderStars(rating.rating)}</div>
+                      </div>
+                      <div style={{ fontSize: '0.88rem', color: '#555' }}>{rating.review}</div>
+                      {rating.created_at && <div style={{ fontSize: '0.75rem', color: '#999', marginTop: 6 }}>{new Date(rating.created_at).toLocaleDateString()}</div>}
+                    </div>
+                  )) : <p style={{ color: '#888', fontSize: '0.85rem' }}>No reviews match the selected filter.</p>}
+                </div>
+              </>
+            ) : <p style={{ color: '#888' }}>{t('noRatings')}</p>}
           </div>
         </div>
       </section>

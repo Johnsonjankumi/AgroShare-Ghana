@@ -656,3 +656,124 @@ input.error:focus, textarea.error:focus, select.error:focus {
   font-weight: 600;
   margin-top: 8px;
 }
+
+/* ── Phase 4: Ratings System ── */
+.rating-average {
+  text-align: center;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--primary-light), rgba(23, 105, 170, 0.05));
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+}
+
+.rating-average-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.rating-average-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.rating-distribution-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.rating-distribution-item:hover {
+  background: var(--bg);
+}
+
+.rating-bar {
+  flex: 1;
+  height: 20px;
+  background: var(--border-light);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.rating-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rating-bar-label {
+  min-width: 60px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.rating-bar-percent {
+  min-width: 50px;
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.review-card {
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--surface);
+  margin-bottom: 10px;
+  transition: var(--transition);
+}
+
+.review-card:hover {
+  box-shadow: var(--shadow-sm);
+  border-left-color: var(--secondary);
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.review-author {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.review-rating {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.9rem;
+}
+
+.review-body {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.review-date {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.rating-filter {
+  background: var(--primary-light);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+
+.rating-filter select {
+  width: 100%;
+  margin-top: 6px;
+}
