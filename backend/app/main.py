@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import os
 from app.routers import farmers, equipment, bookings, pools, payments, ussd, auth, ratings, subscriptions
 
@@ -64,3 +65,28 @@ app.include_router(ussd.router, prefix="/api/ussd", tags=["USSD"])
 # Mount static files for uploaded equipment photos
 if os.path.exists("uploads"):
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Mount React frontend static files
+FRONTEND_BUILD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "build")
+if os.path.exists(FRONTEND_BUILD_DIR):
+    app.mount("/static", StaticFiles(directory=os.path.join(FRONTEND_BUILD_DIR, "static")), name="static")
+
+    # Root path handler - serve React app for non-API routes
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Don't serve frontend for API routes
+        if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi"):
+            return {"detail": "Not Found"}
+        
+        # Serve index.html for all other routes (React routing)
+        index_path = os.path.join(FRONTEND_BUILD_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return {"detail": "Not Found"}
+    
+    @app.get("/")
+    async def serve_root():
+        index_path = os.path.join(FRONTEND_BUILD_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return {"detail": "Frontend not found"}
