@@ -80,6 +80,20 @@ const translations = {
     useMyLocation: 'Use my location',
     locationSet: 'Location saved',
     password: 'Password (min. 6 characters)',
+    loading: 'loading',
+    searchEquipment: 'Search Equipment',
+    searchPlaceholder: 'Search by type, owner, or description',
+    filterCategory: 'Filter by Category',
+    filterPrice: 'Filter by Price',
+    priceMin: 'Price Min (GHS)',
+    priceMax: 'Price Max (GHS)',
+    found: 'Found',
+    equipment: 'equipment',
+    noMatches: 'No equipment matches your filters. Try adjusting your search.',
+    favorites: 'Your Favorite Equipment',
+    addToFavorites: 'Add to favorites',
+    removeFromFavorites: 'Remove from favorites',
+    favoritesDescription: 'Equipment you\'ve bookmarked for quick access',
   },
   twi: {
     title: 'AgroShare Ghana',
@@ -152,6 +166,20 @@ const translations = {
     useMyLocation: 'Fa me beae',
     locationSet: 'Beae akyerɛ',
     password: 'Gyinae (nsɛm 6 a ɛdɔɔso)',
+    loading: 'adwuma a ɛyɛ',
+    searchEquipment: 'Hwɛ Akode',
+    searchPlaceholder: 'Hwɛ wɔ sɛn, onini, anaa nkyerɛmu mu',
+    filterCategory: 'Fa wɔ sɛn mu',
+    filterPrice: 'Fa boɔ mu',
+    priceMin: 'Boɔ kɛkɛ (GHS)',
+    priceMax: 'Boɔ kɛse (GHS)',
+    found: 'Ahwehwɛ',
+    equipment: 'akode',
+    noMatches: 'Akode biara nni wɔ wʼahwehwɛ mu. Prɔ sɛ wobɔ wo ahwehwɛ no mu.',
+    favorites: 'Akode a wopɛ (Favorites)',
+    addToFavorites: 'Ka fa favorites so',
+    removeFromFavorites: 'Pam fii favorites so',
+    favoritesDescription: 'Akode a wokyerɛw ama wo din se woacɔ so',
   },
 };
 
@@ -201,6 +229,15 @@ function App() {
   const [poolErrors, setPoolErrors] = useState({});
   const [paymentErrors, setPaymentErrors] = useState({});
   const [ratingErrors, setRatingErrors] = useState({});
+  
+  // Phase 3: Search & Filters states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [priceMin, setPriceMin] = useState('');
+  const [priceMax, setPriceMax] = useState('');
+  const [filteredEquipment, setFilteredEquipment] = useState([]);
+  const [showAutoComplete, setShowAutoComplete] = useState(false);
+  const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('favoriteEquipment')) || []);
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -270,6 +307,55 @@ function App() {
   const loadDistrict = () => {
     fetch(`${API_BASE}/equipment/?district=${encodeURIComponent(district)}`).then(r => r.json()).then(setEquipment).catch(() => {});
     fetch(`${API_BASE}/pools/?district=${encodeURIComponent(district)}`).then(r => r.json()).then(setRentalPools).catch(() => {});
+  };
+
+  // Phase 3: Apply search and filter logic
+  useEffect(() => {
+    let filtered = equipment;
+    
+    // Filter by search term (equipment type, owner name, or description)
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.type?.toLowerCase().includes(search) ||
+        item.owner_name?.toLowerCase().includes(search) ||
+        item.description?.toLowerCase().includes(search)
+      );
+    }
+    
+    // Filter by category
+    if (selectedCategory) {
+      filtered = filtered.filter(item => item.category === selectedCategory);
+    }
+    
+    // Filter by price range
+    const min = priceMin ? parseFloat(priceMin) : 0;
+    const max = priceMax ? parseFloat(priceMax) : Infinity;
+    filtered = filtered.filter(item => {
+      const price = parseFloat(item.price_per_day || 0);
+      return price >= min && price <= max;
+    });
+    
+    setFilteredEquipment(filtered);
+  }, [equipment, searchTerm, selectedCategory, priceMin, priceMax]);
+
+  // Phase 3: Get autocomplete suggestions
+  const getAutocompleteSuggestions = () => {
+    const types = [...new Set(equipment.map(e => e.type).filter(Boolean))];
+    const owners = [...new Set(equipment.map(e => e.owner_name).filter(Boolean))];
+    return [...types, ...owners].filter(s => 
+      s.toLowerCase().includes(searchTerm.toLowerCase()) && searchTerm.length > 0
+    ).slice(0, 8);
+  };
+
+  // Phase 3: Toggle favorite equipment
+  const toggleFavorite = (equipmentId) => {
+    const newFavorites = favorites.includes(equipmentId)
+      ? favorites.filter(id => id !== equipmentId)
+      : [...favorites, equipmentId];
+    setFavorites(newFavorites);
+    localStorage.setItem('favoriteEquipment', JSON.stringify(newFavorites));
+    showNotice('success', favorites.includes(equipmentId) ? '❤️ Removed from favorites' : '❤️ Added to favorites');
   };
 
   const getMyLocation = () => {
@@ -884,12 +970,106 @@ function App() {
         </div>
       </div>
 
+      {/* ── Phase 3: Search & Filters ── */}
+      <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+        <h2 style={{ marginTop: 0 }}>🔍 Search & Filter Equipment</h2>
+        <div className="grid-2">
+          <div>
+            <label>Search by type, owner, or description<br />
+              <input
+                type="text"
+                placeholder="e.g. Tractor, Pump, John..."
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setShowAutoComplete(e.target.value.length > 0); }}
+                onBlur={() => setTimeout(() => setShowAutoComplete(false), 200)}
+              />
+              {showAutoComplete && getAutocompleteSuggestions().length > 0 && (
+                <div style={{ background: 'white', border: '1px solid #ddd', borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: 'auto', zIndex: 100, position: 'relative' }}>
+                  {getAutocompleteSuggestions().map((suggestion, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => { setSearchTerm(suggestion); setShowAutoComplete(false); }}
+                      style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', hover: { background: '#f5f5f5' } }}
+                    >
+                      {suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </label>
+          </div>
+          
+          <div>
+            <label>Category<br />
+              <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
+                <option value="">All categories</option>
+                <option value="tractor">🚜 Tractor</option>
+                <option value="plow">Plow</option>
+                <option value="pump">💧 Pump</option>
+                <option value="harvester">Harvester</option>
+                <option value="sprayer">Sprayer</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+          </div>
+          
+          <div>
+            <label>Price Min (GHS)<br />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 50"
+                value={priceMin}
+                onChange={e => setPriceMin(e.target.value)}
+              />
+            </label>
+          </div>
+          
+          <div>
+            <label>Price Max (GHS)<br />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 500"
+                value={priceMax}
+                onChange={e => setPriceMax(e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+        <div style={{ marginTop: 12, fontSize: '0.88rem', color: '#666' }}>
+          🎯 Found {filteredEquipment.length} equipment{filteredEquipment.length !== equipment.length ? ` (filtered from ${equipment.length})` : ''}
+        </div>
+      </section>
+
       {/* ── Available Equipment & Rental Pools ── */}
       <div className="grid-2" style={{ marginBottom: 14 }}>
         <div style={card}>
           <h2>📋 {t('availableEquipment')}</h2>
-          {equipment.length > 0 ? equipment.map(item => (
-            <div key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
+          {filteredEquipment.length > 0 ? filteredEquipment.map(item => (
+            <div key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #eee', position: 'relative' }}>
+              {/* Favorite button */}
+              <button
+                type="button"
+                onClick={() => toggleFavorite(item.id)}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                  color: favorites.includes(item.id) ? '#d32f2f' : '#ccc'
+                }}
+                title={favorites.includes(item.id) ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {favorites.includes(item.id) ? '❤️' : '🤍'}
+              </button>
+              
               {item.photo_url && (
                 <img
                   src={`${API_BASE.replace('/api', '')}${item.photo_url}`}
@@ -911,7 +1091,7 @@ function App() {
                 {isLoadingPhotoUpload ? <><span className="spinner"></span>({t('loading')})</> : <>{t('uploadPhoto')}</> }
               </button>}
             </div>
-          )) : <p style={{ color: '#888' }}>{t('noEquipment')}</p>}
+          )) : <p style={{ color: '#888' }}>{filteredEquipment.length === 0 && equipment.length > 0 ? '❌ No equipment matches your filters. Try adjusting your search.' : t('noEquipment')}</p>}
         </div>
 
         <div style={card}>
@@ -926,6 +1106,44 @@ function App() {
           )) : <p style={{ color: '#888' }}>{t('noPools')}</p>}
         </div>
       </div>
+
+      {/* ── Phase 3: Favorites Section ── */}
+      {favorites.length > 0 && (
+        <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+          <h2 style={{ marginTop: 0 }}>❤️ Your Favorite Equipment ({favorites.length})</h2>
+          <p style={{ marginTop: 0, color: '#555', fontSize: '0.88rem' }}>Equipment you've bookmarked for quick access</p>
+          <div className="grid-2">
+            {equipment.filter(item => favorites.includes(item.id)).map(item => (
+              <div key={item.id} style={{ border: '1px solid #e0e0e0', borderRadius: 8, padding: 12, background: '#fff9f9', position: 'relative' }}>
+                {item.photo_url && (
+                  <img
+                    src={`${API_BASE.replace('/api', '')}${item.photo_url}`}
+                    alt={item.type}
+                    style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }}
+                  />
+                )}
+                <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>{item.type}</div>
+                {item.category && <span style={{ background: '#e8f5e9', color: '#2e7d32', borderRadius: 4, padding: '2px 6px', fontSize: '0.78rem' }}>{item.category}</span>}
+                <div style={{ fontSize: '0.85rem', color: '#555', marginTop: 4 }}>📍 {item.district}</div>
+                <div style={{ fontSize: '0.85rem', color: '#555' }}>👤 {item.owner_name}</div>
+                <div style={{ fontWeight: 700, color: '#1769aa', marginTop: 4 }}>GHS {Number(item.price_per_day ?? 0).toFixed(2)} / day</div>
+                <button
+                  type="button"
+                  onClick={() => toggleFavorite(item.id)}
+                  style={{
+                    width: '100%',
+                    marginTop: 8,
+                    background: '#d32f2f',
+                    color: 'white'
+                  }}
+                >
+                  ❤️ Remove from favorites
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── Create Pool, Create Booking, Payments ── */}
       <div className="grid-3" style={{ marginBottom: 14 }}>
