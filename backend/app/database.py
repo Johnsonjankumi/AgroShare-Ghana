@@ -59,6 +59,7 @@ def ensure_legacy_schema_compatibility() -> None:
         migrations = {
             "farmers": [
                 ("password", "VARCHAR"),
+                ("email", "VARCHAR"),
                 ("latitude", "FLOAT"),
                 ("longitude", "FLOAT"),
                 ("created_at", "TIMESTAMP"),
