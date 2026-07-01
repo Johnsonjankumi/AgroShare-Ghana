@@ -30,11 +30,11 @@ services:
       - key: PAYSTACK_WEBHOOK_SECRET
         generateValue: true
       - key: AFRICASTALKING_USERNAME
-        value: Agrosharegh
+        value: sandbox
       - key: AFRICASTALKING_API_KEY
         value: atsk_280cd4f6b2a8df1e468719cf5dcf8db602eb1927da7a2c330064160f9f944c6e98161558
       - key: AFRICASTALKING_SENDER_ID
-        value: AgroShare
+        value: SANDBOX
       - key: SMS_PROVIDER
         value: africastalking
 
