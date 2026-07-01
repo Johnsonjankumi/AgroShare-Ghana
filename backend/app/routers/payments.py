@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 from typing import List
 import httpx
+
+# Force redeployment - sandbox SMS config
 from sqlalchemy.orm import Session
 from app.database import get_db, Payment as PaymentModel, Booking as BookingModel, Equipment as EquipmentModel, Farmer as FarmerModel
 
