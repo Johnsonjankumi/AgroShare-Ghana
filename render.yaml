@@ -32,7 +32,7 @@ services:
       - key: AFRICASTALKING_USERNAME
         value: Agroshareggh
       - key: AFRICASTALKING_API_KEY
-        value: atsk_2dd0b312201822d733522debc855ba5ceae75e03078bde59a12afc2b18d7070cf55d41bf
+        value: atsk_280cd4f6b2a8df1e468719cf5dcf8db602eb1927da7a2c330064160f9f944c6e98161558
       - key: AFRICASTALKING_SENDER_ID
         value: AgroShare
       - key: SMS_PROVIDER
