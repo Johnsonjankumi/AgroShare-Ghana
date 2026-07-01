@@ -179,6 +179,29 @@ function App() {
   const [ratings, setRatings] = useState([]);
   const [ratingForm, setRatingForm] = useState({ farmer_id: '', rater_name: '', rating: 5, review: '' });
   const [photoFile, setPhotoFile] = useState(null);
+  
+  // Loading states for forms
+  const [isLoadingFarmer, setIsLoadingFarmer] = useState(false);
+  const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
+  const [isLoadingBooking, setIsLoadingBooking] = useState(false);
+  const [isLoadingPool, setIsLoadingPool] = useState(false);
+  const [isLoadingPayment, setIsLoadingPayment] = useState(false);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(false);
+  const [isLoadingRating, setIsLoadingRating] = useState(false);
+  const [isLoadingUssd, setIsLoadingUssd] = useState(false);
+  const [isLoadingPhotoUpload, setIsLoadingPhotoUpload] = useState(false);
+  const [isLoadingRelease, setIsLoadingRelease] = useState(false);
+  const [isLoadingRetry, setIsLoadingRetry] = useState(false);
+  const [isLoadingSendSms, setIsLoadingSendSms] = useState(false);
+  
+  // Error states for forms
+  const [farmerErrors, setFarmerErrors] = useState({});
+  const [equipmentErrors, setEquipmentErrors] = useState({});
+  const [bookingErrors, setBookingErrors] = useState({});
+  const [poolErrors, setPoolErrors] = useState({});
+  const [paymentErrors, setPaymentErrors] = useState({});
+  const [ratingErrors, setRatingErrors] = useState({});
+  
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
@@ -262,76 +285,156 @@ function App() {
 
   const submitFarmer = async e => {
     e.preventDefault();
-    const res = await fetch(`${API_BASE}/farmers/`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
-    });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Failed to register farmer.'); return; }
-    setFarmers(f => [...f, data]);
-    setBookingForm(b => ({ ...b, farmer_id: data.id }));
-    setSubscriptionForm(s => ({ ...s, farmer_id: String(data.id), mobile_number: data.phone }));
-    setForm({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null, payout_account_type: 'mobile_money', payout_bank_code: 'MTN', payout_account_number: '' });
-    showNotice('success', `✅ Farmer "${data.name}" registered! Your Farmer ID is ${data.id}. It has been sent to the booking and subscription forms.`);
+    setIsLoadingFarmer(true);
+    setFarmerErrors({});
+    try {
+      const res = await fetch(`${API_BASE}/farmers/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.detail && typeof data.detail === 'string') {
+          setFarmerErrors({ submit: data.detail });
+        } else if (data.detail && Array.isArray(data.detail)) {
+          const errors = {};
+          data.detail.forEach(err => {
+            if (err.loc && err.loc[1]) errors[err.loc[1]] = err.msg;
+          });
+          setFarmerErrors(errors.submit ? errors : { submit: 'Validation failed. Check your inputs.' });
+        } else {
+          setFarmerErrors({ submit: 'Failed to register farmer.' });
+        }
+        showNotice('error', `❌ ${Object.values(data.detail || { detail: 'Registration failed' })[0] || 'Failed to register farmer.'}`);
+        return;
+      }
+      setFarmers(f => [...f, data]);
+      setBookingForm(b => ({ ...b, farmer_id: data.id }));
+      setSubscriptionForm(s => ({ ...s, farmer_id: String(data.id), mobile_number: data.phone }));
+      setForm({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null, payout_account_type: 'mobile_money', payout_bank_code: 'MTN', payout_account_number: '' });
+      setFarmerErrors({});
+      showNotice('success', `✅ Farmer "${data.name}" registered! Farmer ID: ${data.id}`);
+    } catch (err) {
+      setFarmerErrors({ submit: 'Network error. Please try again.' });
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingFarmer(false);
+    }
   };
 
   const submitEquipment = async e => {
     e.preventDefault();
-    const res = await fetch(`${API_BASE}/equipment/`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...equipmentForm,
-        owner_farmer_id: equipmentForm.owner_farmer_id ? Number(equipmentForm.owner_farmer_id) : null,
-        price_per_day: Number(equipmentForm.price_per_day),
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Failed to add equipment listing.'); return; }
-    setEquipment(eq => [...eq, data]);
-    setEquipmentForm({ owner_name: '', owner_farmer_id: '', type: '', category: 'other', district, price_per_day: '', description: '' });
-    showNotice('success', `✅ Equipment listed! Equipment ID is ${data.id}.`);
+    setIsLoadingEquipment(true);
+    setEquipmentErrors({});
+    try {
+      const res = await fetch(`${API_BASE}/equipment/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...equipmentForm,
+          owner_farmer_id: equipmentForm.owner_farmer_id ? Number(equipmentForm.owner_farmer_id) : null,
+          price_per_day: Number(equipmentForm.price_per_day),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEquipmentErrors({ submit: data.detail || 'Failed to add equipment listing.' });
+        showNotice('error', `❌ ${data.detail || 'Failed to add equipment listing.'}`);
+        return;
+      }
+      setEquipment(eq => [...eq, data]);
+      setEquipmentForm({ owner_name: '', owner_farmer_id: '', type: '', category: 'other', district, price_per_day: '', description: '' });
+      setEquipmentErrors({});
+      showNotice('success', `✅ Equipment listed! Equipment ID: ${data.id}`);
+    } catch (err) {
+      setEquipmentErrors({ submit: 'Network error. Please try again.' });
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingEquipment(false);
+    }
   };
 
   const submitBooking = async e => {
     e.preventDefault();
-    const res = await fetch(`${API_BASE}/bookings/`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookingForm),
-    });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Failed to create booking.'); return; }
-    setBookingForm({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
-    showNotice('success', `✅ Booking created! Booking ID is ${data.id}.`);
+    setIsLoadingBooking(true);
+    setBookingErrors({});
+    try {
+      const res = await fetch(`${API_BASE}/bookings/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookingForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBookingErrors({ submit: data.detail || 'Failed to create booking.' });
+        showNotice('error', `❌ ${data.detail || 'Failed to create booking.'}`);
+        return;
+      }
+      setBookingForm({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
+      setBookingErrors({});
+      showNotice('success', `✅ Booking created! Booking ID: ${data.id}`);
+    } catch (err) {
+      setBookingErrors({ submit: 'Network error. Please try again.' });
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingBooking(false);
+    }
   };
 
   const submitPool = async e => {
     e.preventDefault();
-    const res = await fetch(`${API_BASE}/pools/`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(poolForm),
-    });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Failed to create pool.'); return; }
-    setRentalPools(p => { const ex = p.find(x => x.id === data.id); return ex ? p.map(x => x.id === data.id ? data : x) : [...p, data]; });
-    setPoolForm({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
-    showNotice('success', `✅ Rental pool created! Pool ID is ${data.id}.`);
+    setIsLoadingPool(true);
+    setPoolErrors({});
+    try {
+      const res = await fetch(`${API_BASE}/pools/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(poolForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPoolErrors({ submit: data.detail || 'Failed to create pool.' });
+        showNotice('error', `❌ ${data.detail || 'Failed to create pool.'}`);
+        return;
+      }
+      setRentalPools(p => { const ex = p.find(x => x.id === data.id); return ex ? p.map(x => x.id === data.id ? data : x) : [...p, data]; });
+      setPoolForm({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
+      setPoolErrors({});
+      showNotice('success', `✅ Rental pool created! Pool ID: ${data.id}`);
+    } catch (err) {
+      setPoolErrors({ submit: 'Network error. Please try again.' });
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingPool(false);
+    }
   };
 
   const submitPayment = async e => {
     e.preventDefault();
-    const res = await fetch(`${API_BASE}/payments/`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(paymentForm),
-    });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Unable to create payment. Check the booking ID and try again.'); return; }
-    setPayments(p => [...p, data]);
-    refreshOwnerActivity();
+    setIsLoadingPayment(true);
+    setPaymentErrors({});
+    try {
+      const res = await fetch(`${API_BASE}/payments/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(paymentForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPaymentErrors({ submit: data.detail || 'Unable to create payment. Check the booking ID and try again.' });
+        showNotice('error', `❌ ${data.detail || 'Unable to create payment. Check the booking ID and try again.'}`);
+        return;
+      }
+      setPayments(p => [...p, data]);
+      refreshOwnerActivity();
 
-    if (data.checkout_url) {
-      showNotice('success', 'Redirecting to Paystack checkout...');
-      window.location.assign(data.checkout_url);
-      return;
+      if (data.checkout_url) {
+        showNotice('success', 'Redirecting to Paystack checkout...');
+        window.location.assign(data.checkout_url);
+        return;
+      }
+
+      setPaymentForm({ booking_id: '', mobile_number: '', method: 'paystack' });
+      setPaymentErrors({});
+      showNotice('success', `✅ Payment of GHS ${Number(data.amount).toFixed(2)} created! Reference: ${data.reference}`);
+    } catch (err) {
+      setPaymentErrors({ submit: 'Network error. Please try again.' });
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingPayment(false);
     }
-
-    setPaymentForm({ booking_id: '', mobile_number: '', method: 'paystack' });
-    showNotice('success', `✅ Payment of GHS ${Number(data.amount).toFixed(2)} created! Reference: ${data.reference}`);
   };
 
   const submitSubscription = async plan => {
@@ -340,34 +443,51 @@ function App() {
       return;
     }
 
-    const res = await fetch(`${API_BASE}/subscriptions/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        farmer_id: Number(subscriptionForm.farmer_id),
-        mobile_number: subscriptionForm.mobile_number,
-        plan,
-      }),
-    });
+    setIsLoadingSubscription(true);
+    try {
+      const res = await fetch(`${API_BASE}/subscriptions/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          farmer_id: Number(subscriptionForm.farmer_id),
+          mobile_number: subscriptionForm.mobile_number,
+          plan,
+        }),
+      });
 
-    const data = await res.json();
-    if (!res.ok) {
-      showNotice('error', data.detail || 'Failed to create subscription.');
-      return;
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Failed to create subscription.'}`);
+        return;
+      }
+
+      setSubscriptions(s => [data, ...s]);
+      refreshOwnerActivity();
+      showNotice('success', `✅ ${plan} subscription paid. Reference: ${data.reference}`);
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingSubscription(false);
     }
-
-    setSubscriptions(s => [data, ...s]);
-    refreshOwnerActivity();
-    showNotice('success', `✅ ${plan} subscription paid. Reference: ${data.reference}`);
   };
 
   const releasePayment = async paymentId => {
-    const res = await fetch(`${API_BASE}/payments/${paymentId}/release`, { method: 'POST' });
-    const updated = await res.json();
-    if (!res.ok) { showNotice('error', updated.detail || 'Unable to release payment.'); return; }
-    setPayments(p => p.map(x => x.id === updated.id ? updated : x));
-    refreshOwnerActivity();
-    showNotice('success', '✅ Payment verified. Seller payout will be handled manually.');
+    setIsLoadingRelease(true);
+    try {
+      const res = await fetch(`${API_BASE}/payments/${paymentId}/release`, { method: 'POST' });
+      const updated = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${updated.detail || 'Unable to release payment.'}`);
+        return;
+      }
+      setPayments(p => p.map(x => x.id === updated.id ? updated : x));
+      refreshOwnerActivity();
+      showNotice('success', '✅ Payment verified. Seller payout will be handled manually.');
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingRelease(false);
+    }
   };
 
   const retryHeldPaymentByReference = async () => {
@@ -376,16 +496,26 @@ function App() {
       return;
     }
 
-    const res = await fetch(`${API_BASE}/payments/retry/${encodeURIComponent(retryReference.trim())}`, { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Unable to retry payment.'); return; }
+    setIsLoadingRetry(true);
+    try {
+      const res = await fetch(`${API_BASE}/payments/retry/${encodeURIComponent(retryReference.trim())}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Unable to retry payment.'}`);
+        return;
+      }
 
-    const refresh = await fetch(`${API_BASE}/payments/`);
-    const refreshed = await refresh.json();
-    setPayments(Array.isArray(refreshed) ? refreshed : []);
-    refreshOwnerActivity();
-    setRetryReference('');
-    showNotice('success', `✅ ${data.detail}`);
+      const refresh = await fetch(`${API_BASE}/payments/`);
+      const refreshed = await refresh.json();
+      setPayments(Array.isArray(refreshed) ? refreshed : []);
+      refreshOwnerActivity();
+      setRetryReference('');
+      showNotice('success', `✅ ${data.detail}`);
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingRetry(false);
+    }
   };
 
   const sendSellerSmsForPayment = async payment => {
@@ -405,56 +535,101 @@ function App() {
       payload.seller_phone = sellerPhoneInput.trim();
     }
 
-    const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(payment.reference)}/notify-seller`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      showNotice('error', data.detail || 'Unable to send seller SMS.');
-      return;
-    }
+    setIsLoadingSendSms(true);
+    try {
+      const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(payment.reference)}/notify-seller`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Unable to send seller SMS.'}`);
+        return;
+      }
 
-    showNotice(data.sent ? 'success' : 'error', `${data.detail} Message: ${data.message}`);
+      showNotice(data.sent ? 'success' : 'error', `${data.detail} Message: ${data.message}`);
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingSendSms(false);
+    }
   };
 
   const sendUssd = async e => {
     e.preventDefault();
-    const res = await fetch(`${API_BASE}/ussd/`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ussdForm),
-    });
-    const data = await res.json();
-    localStorage.setItem('ussdSession', data.session_id);
-    localStorage.setItem('ussdResponse', JSON.stringify(data));
-    setUssdResponse(data);
-    setUssdForm(f => ({ ...f, session_id: data.session_id }));
-    showNotice('success', '✅ USSD request sent.');
+    setIsLoadingUssd(true);
+    try {
+      const res = await fetch(`${API_BASE}/ussd/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ussdForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Failed to send USSD request.'}`);
+        return;
+      }
+      localStorage.setItem('ussdSession', data.session_id);
+      localStorage.setItem('ussdResponse', JSON.stringify(data));
+      setUssdResponse(data);
+      setUssdForm(f => ({ ...f, session_id: data.session_id }));
+      showNotice('success', '✅ USSD request sent.');
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingUssd(false);
+    }
   };
 
   const uploadEquipmentPhoto = async equipmentId => {
-    if (!photoFile) { showNotice('error', 'Please select a photo first.'); return; }
-    const formData = new FormData();
-    formData.append('file', photoFile);
-    const res = await fetch(`${API_BASE}/equipment/upload/${equipmentId}`, { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Failed to upload photo.'); return; }
-    setPhotoFile(null);
-    showNotice('success', '✅ Photo uploaded successfully!');
-    fetch(`${API_BASE}/equipment/`).then(r => r.json()).then(setEquipment).catch(() => {});
+    if (!photoFile) {
+      showNotice('error', 'Please select a photo first.');
+      return;
+    }
+    setIsLoadingPhotoUpload(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', photoFile);
+      const res = await fetch(`${API_BASE}/equipment/upload/${equipmentId}`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Failed to upload photo.'}`);
+        return;
+      }
+      setPhotoFile(null);
+      showNotice('success', '✅ Photo uploaded successfully!');
+      fetch(`${API_BASE}/equipment/`).then(r => r.json()).then(setEquipment).catch(() => {});
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingPhotoUpload(false);
+    }
   };
 
   const submitRating = async e => {
     e.preventDefault();
-    const res = await fetch(`${API_BASE}/ratings/`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...ratingForm, rating: Number(ratingForm.rating) }),
-    });
-    const data = await res.json();
-    if (!res.ok) { showNotice('error', data.detail || 'Failed to submit rating.'); return; }
-    setRatings(r => [...r, data]);
-    setRatingForm({ farmer_id: '', rater_name: '', rating: 5, review: '' });
-    showNotice('success', '✅ Rating submitted successfully!');
+    setIsLoadingRating(true);
+    setRatingErrors({});
+    try {
+      const res = await fetch(`${API_BASE}/ratings/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...ratingForm, rating: Number(ratingForm.rating) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRatingErrors({ submit: data.detail || 'Failed to submit rating.' });
+        showNotice('error', `❌ ${data.detail || 'Failed to submit rating.'}`);
+        return;
+      }
+      setRatings(r => [...r, data]);
+      setRatingForm({ farmer_id: '', rater_name: '', rating: 5, review: '' });
+      setRatingErrors({});
+      showNotice('success', '✅ Rating submitted successfully!');
+    } catch (err) {
+      setRatingErrors({ submit: 'Network error. Please try again.' });
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingRating(false);
+    }
   };
 
   const fetchFarmerRatings = async farmerId => {
@@ -551,7 +726,9 @@ function App() {
               <li>✅ Verified seller badge (builds trust with buyers)</li>
               <li>✅ Access to all renters across Ghana</li>
             </ul>
-            <button type="button" onClick={() => submitSubscription('monthly')}>{t('subscribe')}</button>
+            <button type="button" onClick={() => submitSubscription('monthly')} disabled={isLoadingSubscription} className={isLoadingSubscription ? 'loading' : ''}>
+              {isLoadingSubscription ? <><span className="spinner"></span>({t('loading')})</> : <>{t('subscribe')}</> }
+            </button>
           </div>
           <div className="pricing-card featured">
             <div style={{ fontWeight: 700 }}>
@@ -568,7 +745,9 @@ function App() {
               <li>⭐ Free business profile page for your farm</li>
               <li>🎁 2 months completely free</li>
             </ul>
-            <button type="button" onClick={() => submitSubscription('yearly')}>{t('subscribe')}</button>
+            <button type="button" onClick={() => submitSubscription('yearly')} disabled={isLoadingSubscription} className={isLoadingSubscription ? 'loading' : ''}>
+              {isLoadingSubscription ? <><span className="spinner"></span>({t('loading')})</> : <>{t('subscribe')}</> }
+            </button>
           </div>
         </div>
       </section>
@@ -611,37 +790,64 @@ function App() {
         <div style={card}>
           <h2>👤 {t('registerFarmer')}</h2>
           <form onSubmit={submitFarmer}>
-            <label>{t('farmerName')}<br /><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></label>
-            <label>{t('phone')}<br /><input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required /></label>
-            <label>{t('password')}<br /><input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required /></label>
+            <label>{t('farmerName')}<span className="required-indicator">*</span><br /><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required className={farmerErrors.name ? 'error' : ''} /></label>
+            {farmerErrors.name && <span className="error-message">{farmerErrors.name}</span>}
+            
+            <label>{t('phone')}<span className="required-indicator">*</span><br /><input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required className={farmerErrors.phone ? 'error' : ''} /></label>
+            {farmerErrors.phone && <span className="error-message">{farmerErrors.phone}</span>}
+            
+            <label>{t('password')}<span className="required-indicator">*</span><br /><input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required className={farmerErrors.password ? 'error' : ''} /></label>
+            {farmerErrors.password && <span className="error-message">{farmerErrors.password}</span>}
+            
             <label>Payout account type<br />
               <select value={form.payout_account_type} onChange={e => setForm(f => ({ ...f, payout_account_type: e.target.value }))}>
                 <option value="mobile_money">Mobile Money</option>
                 <option value="nuban">Bank Account</option>
               </select>
             </label>
-            <label>Payout network/bank code<br /><input value={form.payout_bank_code} onChange={e => setForm(f => ({ ...f, payout_bank_code: e.target.value }))} placeholder="e.g. MTN" /></label>
-            <label>Payout account number (optional now, required for auto payout)<br /><input value={form.payout_account_number} onChange={e => setForm(f => ({ ...f, payout_account_number: e.target.value }))} placeholder="e.g. 0246326373" /></label>
+            
+            <label>Payout network/bank code<br /><input value={form.payout_bank_code} onChange={e => setForm(f => ({ ...f, payout_bank_code: e.target.value }))} placeholder="e.g. MTN" className={farmerErrors.payout_bank_code ? 'error' : ''} /></label>
+            {farmerErrors.payout_bank_code && <span className="error-message">{farmerErrors.payout_bank_code}</span>}
+            
+            <label>Payout account number (optional now, required for auto payout)<br /><input value={form.payout_account_number} onChange={e => setForm(f => ({ ...f, payout_account_number: e.target.value }))} placeholder="e.g. 0246326373" className={farmerErrors.payout_account_number ? 'error' : ''} /></label>
+            {farmerErrors.payout_account_number && <span className="error-message">{farmerErrors.payout_account_number}</span>}
+            
             <label>{t('district')}<br />
               <select value={form.district} onChange={e => setForm(f => ({ ...f, district: e.target.value }))}>
                 {DISTRICTS.map(d => <option key={d}>{d}</option>)}
               </select>
             </label>
+            
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>📍 Location (optional)</div>
-              <button type="button" onClick={getMyLocation} style={{ background: '#2e7d32', marginBottom: 4 }}>{t('useMyLocation')}</button>
+              <button type="button" onClick={getMyLocation} disabled={isLoadingFarmer} style={{ background: '#2e7d32', marginBottom: 4 }}>{t('useMyLocation')}</button>
               {form.latitude && <small style={{ display: 'block', color: '#2e7d32' }}>✅ {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}</small>}
             </div>
-            <button type="submit" style={{ background: '#2e7d32' }}>{t('registerFarmer')}</button>
+            
+            {farmerErrors.submit && <span className="error-message">{farmerErrors.submit}</span>}
+            
+            <button type="submit" disabled={isLoadingFarmer} style={{ background: '#2e7d32' }} className={isLoadingFarmer ? 'loading' : ''}>
+              {isLoadingFarmer ? (
+                <><span className="spinner"></span>{t('registerFarmer')} ({t('loading')})</>
+              ) : (
+                t('registerFarmer')
+              )}
+            </button>
           </form>
         </div>
 
         <div style={card}>
           <h2>🚜 {t('listEquipment')}</h2>
           <form onSubmit={submitEquipment}>
-            <label>{t('ownerName')}<br /><input value={equipmentForm.owner_name} onChange={e => setEquipmentForm(f => ({ ...f, owner_name: e.target.value }))} required /></label>
-            <label>Owner Farmer ID (for payout routing)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" /></label>
-            <label>{t('equipmentType')}<br /><input value={equipmentForm.type} onChange={e => setEquipmentForm(f => ({ ...f, type: e.target.value }))} required /></label>
+            <label>{t('ownerName')}<span className="required-indicator">*</span><br /><input value={equipmentForm.owner_name} onChange={e => setEquipmentForm(f => ({ ...f, owner_name: e.target.value }))} required className={equipmentErrors.owner_name ? 'error' : ''} /></label>
+            {equipmentErrors.owner_name && <span className="error-message">{equipmentErrors.owner_name}</span>}
+            
+            <label>Owner Farmer ID (for payout routing)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" className={equipmentErrors.owner_farmer_id ? 'error' : ''} /></label>
+            {equipmentErrors.owner_farmer_id && <span className="error-message">{equipmentErrors.owner_farmer_id}</span>}
+            
+            <label>{t('equipmentType')}<span className="required-indicator">*</span><br /><input value={equipmentForm.type} onChange={e => setEquipmentForm(f => ({ ...f, type: e.target.value }))} required className={equipmentErrors.type ? 'error' : ''} /></label>
+            {equipmentErrors.type && <span className="error-message">{equipmentErrors.type}</span>}
+            
             <label>{t('equipmentCategory')}<br />
               <select value={equipmentForm.category} onChange={e => setEquipmentForm(f => ({ ...f, category: e.target.value }))}>
                 <option value="tractor">🚜 Tractor</option>
@@ -652,14 +858,28 @@ function App() {
                 <option value="other">Other</option>
               </select>
             </label>
+            
             <label>{t('district')}<br />
               <select value={equipmentForm.district} onChange={e => setEquipmentForm(f => ({ ...f, district: e.target.value }))}>
                 {DISTRICTS.map(d => <option key={d}>{d}</option>)}
               </select>
             </label>
-            <label>{t('pricePerDay')} (GHS)<br /><input type="number" min="0" step="0.01" value={equipmentForm.price_per_day} onChange={e => setEquipmentForm(f => ({ ...f, price_per_day: e.target.value }))} required /></label>
-            <label>{t('description')}<br /><textarea rows={2} value={equipmentForm.description} onChange={e => setEquipmentForm(f => ({ ...f, description: e.target.value }))} /></label>
-            <button type="submit">{t('addListing')}</button>
+            
+            <label>{t('pricePerDay')} (GHS)<span className="required-indicator">*</span><br /><input type="number" min="0" step="0.01" value={equipmentForm.price_per_day} onChange={e => setEquipmentForm(f => ({ ...f, price_per_day: e.target.value }))} required className={equipmentErrors.price_per_day ? 'error' : ''} /></label>
+            {equipmentErrors.price_per_day && <span className="error-message">{equipmentErrors.price_per_day}</span>}
+            
+            <label>{t('description')}<br /><textarea rows={2} value={equipmentForm.description} onChange={e => setEquipmentForm(f => ({ ...f, description: e.target.value }))} className={equipmentErrors.description ? 'error' : ''} /></label>
+            {equipmentErrors.description && <span className="error-message">{equipmentErrors.description}</span>}
+            
+            {equipmentErrors.submit && <span className="error-message">{equipmentErrors.submit}</span>}
+            
+            <button type="submit" disabled={isLoadingEquipment} className={isLoadingEquipment ? 'loading' : ''}>
+              {isLoadingEquipment ? (
+                <><span className="spinner"></span>{t('addListing')} ({t('loading')})</>
+              ) : (
+                t('addListing')
+              )}
+            </button>
           </form>
         </div>
       </div>
@@ -685,9 +905,11 @@ function App() {
               <div style={{ fontWeight: 700, color: '#1769aa' }}>GHS {Number(item.price_per_day ?? 0).toFixed(2)} / day</div>
               {item.description && <div style={{ fontSize: '0.85rem', color: '#666' }}>{item.description}</div>}
               <label style={{ marginTop: 8, fontSize: '0.85rem' }}>📷 {t('uploadPhoto')}:
-                <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} style={{ marginTop: 4 }} />
+                <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} style={{ marginTop: 4 }} disabled={isLoadingPhotoUpload} />
               </label>
-              {photoFile && <button type="button" onClick={() => uploadEquipmentPhoto(item.id)} style={{ background: '#555', marginTop: 4 }}>{t('uploadPhoto')}</button>}
+              {photoFile && <button type="button" onClick={() => uploadEquipmentPhoto(item.id)} disabled={isLoadingPhotoUpload} style={{ background: '#555', marginTop: 4 }} className={isLoadingPhotoUpload ? 'loading' : ''}>
+                {isLoadingPhotoUpload ? <><span className="spinner"></span>({t('loading')})</> : <>{t('uploadPhoto')}</> }
+              </button>}
             </div>
           )) : <p style={{ color: '#888' }}>{t('noEquipment')}</p>}
         </div>
@@ -710,38 +932,75 @@ function App() {
         <div style={card}>
           <h2>🤝 {t('createPool')}</h2>
           <form onSubmit={submitPool}>
-            <label>{t('farmerId')}<br /><input type="number" value={poolForm.farmer_id} onChange={e => setPoolForm(f => ({ ...f, farmer_id: Number(e.target.value) }))} required /></label>
-            <label>{t('equipmentId')}<br /><input type="number" value={poolForm.equipment_id} onChange={e => setPoolForm(f => ({ ...f, equipment_id: Number(e.target.value) }))} required /></label>
-            <label>{t('rentalDate')}<br /><input type="date" value={poolForm.rental_date} onChange={e => setPoolForm(f => ({ ...f, rental_date: e.target.value }))} required /></label>
+            <label>{t('farmerId')}<span className="required-indicator">*</span><br /><input type="number" value={poolForm.farmer_id} onChange={e => setPoolForm(f => ({ ...f, farmer_id: Number(e.target.value) }))} required className={poolErrors.farmer_id ? 'error' : ''} /></label>
+            {poolErrors.farmer_id && <span className="error-message">{poolErrors.farmer_id}</span>}
+            
+            <label>{t('equipmentId')}<span className="required-indicator">*</span><br /><input type="number" value={poolForm.equipment_id} onChange={e => setPoolForm(f => ({ ...f, equipment_id: Number(e.target.value) }))} required className={poolErrors.equipment_id ? 'error' : ''} /></label>
+            {poolErrors.equipment_id && <span className="error-message">{poolErrors.equipment_id}</span>}
+            
+            <label>{t('rentalDate')}<span className="required-indicator">*</span><br /><input type="date" value={poolForm.rental_date} onChange={e => setPoolForm(f => ({ ...f, rental_date: e.target.value }))} required className={poolErrors.rental_date ? 'error' : ''} /></label>
+            {poolErrors.rental_date && <span className="error-message">{poolErrors.rental_date}</span>}
+            
             <label>{t('district')}<br />
-              <select value={poolForm.district} onChange={e => setPoolForm(f => ({ ...f, district: e.target.value }))}>
+              <select value={poolForm.district} onChange={e => setPoolForm(f => ({ ...f, district: e.target.value }))} className={poolErrors.district ? 'error' : ''}>
                 {DISTRICTS.map(d => <option key={d}>{d}</option>)}
               </select>
             </label>
-            <button type="submit">{t('createPool')}</button>
+            {poolErrors.district && <span className="error-message">{poolErrors.district}</span>}
+            
+            {poolErrors.submit && <span className="error-message">{poolErrors.submit}</span>}
+            
+            <button type="submit" disabled={isLoadingPool} className={isLoadingPool ? 'loading' : ''}>
+              {isLoadingPool ? (
+                <><span className="spinner"></span>{t('createPool')} ({t('loading')})</>
+              ) : (
+                t('createPool')
+              )}
+            </button>
           </form>
         </div>
 
         <div style={card}>
           <h2>📅 {t('createBooking')}</h2>
           <form onSubmit={submitBooking}>
-            <label>{t('farmerId')}<br /><input type="number" value={bookingForm.farmer_id} onChange={e => setBookingForm(f => ({ ...f, farmer_id: Number(e.target.value) }))} required /></label>
-            <label>{t('equipmentId')}<br /><input type="number" value={bookingForm.equipment_id} onChange={e => setBookingForm(f => ({ ...f, equipment_id: Number(e.target.value) }))} required /></label>
-            <label>{t('rentalDate')}<br /><input type="date" value={bookingForm.rental_date} onChange={e => setBookingForm(f => ({ ...f, rental_date: e.target.value }))} required /></label>
+            <label>{t('farmerId')}<span className="required-indicator">*</span><br /><input type="number" value={bookingForm.farmer_id} onChange={e => setBookingForm(f => ({ ...f, farmer_id: Number(e.target.value) }))} required className={bookingErrors.farmer_id ? 'error' : ''} /></label>
+            {bookingErrors.farmer_id && <span className="error-message">{bookingErrors.farmer_id}</span>}
+            
+            <label>{t('equipmentId')}<span className="required-indicator">*</span><br /><input type="number" value={bookingForm.equipment_id} onChange={e => setBookingForm(f => ({ ...f, equipment_id: Number(e.target.value) }))} required className={bookingErrors.equipment_id ? 'error' : ''} /></label>
+            {bookingErrors.equipment_id && <span className="error-message">{bookingErrors.equipment_id}</span>}
+            
+            <label>{t('rentalDate')}<span className="required-indicator">*</span><br /><input type="date" value={bookingForm.rental_date} onChange={e => setBookingForm(f => ({ ...f, rental_date: e.target.value }))} required className={bookingErrors.rental_date ? 'error' : ''} /></label>
+            {bookingErrors.rental_date && <span className="error-message">{bookingErrors.rental_date}</span>}
+            
             <label>{t('district')}<br />
-              <select value={bookingForm.district} onChange={e => setBookingForm(f => ({ ...f, district: e.target.value }))}>
+              <select value={bookingForm.district} onChange={e => setBookingForm(f => ({ ...f, district: e.target.value }))}
+                className={bookingErrors.district ? 'error' : ''}>
                 {DISTRICTS.map(d => <option key={d}>{d}</option>)}
               </select>
             </label>
-            <button type="submit">{t('bookEquipment')}</button>
+            {bookingErrors.district && <span className="error-message">{bookingErrors.district}</span>}
+            
+            {bookingErrors.submit && <span className="error-message">{bookingErrors.submit}</span>}
+            
+            <button type="submit" disabled={isLoadingBooking} className={isLoadingBooking ? 'loading' : ''}>
+              {isLoadingBooking ? (
+                <><span className="spinner"></span>{t('bookEquipment')} ({t('loading')})</>
+              ) : (
+                t('bookEquipment')
+              )}
+            </button>
           </form>
         </div>
 
         <div style={card}>
           <h2>💳 {t('payments')}</h2>
           <form onSubmit={submitPayment}>
-            <label>Booking ID<br /><input type="number" value={paymentForm.booking_id} onChange={e => setPaymentForm(f => ({ ...f, booking_id: Number(e.target.value) }))} required /></label>
-            <label>{t('mobileNumber')}<br /><input value={paymentForm.mobile_number} onChange={e => setPaymentForm(f => ({ ...f, mobile_number: e.target.value }))} required /></label>
+            <label>Booking ID<span className="required-indicator">*</span><br /><input type="number" value={paymentForm.booking_id} onChange={e => setPaymentForm(f => ({ ...f, booking_id: Number(e.target.value) }))} required className={paymentErrors.booking_id ? 'error' : ''} /></label>
+            {paymentErrors.booking_id && <span className="error-message">{paymentErrors.booking_id}</span>}
+            
+            <label>{t('mobileNumber')}<span className="required-indicator">*</span><br /><input value={paymentForm.mobile_number} onChange={e => setPaymentForm(f => ({ ...f, mobile_number: e.target.value }))} required className={paymentErrors.mobile_number ? 'error' : ''} /></label>
+            {paymentErrors.mobile_number && <span className="error-message">{paymentErrors.mobile_number}</span>}
+            
             <label>Payment method<br />
               <select value={paymentForm.method} onChange={e => setPaymentForm(f => ({ ...f, method: e.target.value }))}>
                 <option value="paystack">Paystack</option>
@@ -749,7 +1008,16 @@ function App() {
                 <option value="credit_card">Credit Card</option>
               </select>
             </label>
-            <button type="submit">{t('payNow')}</button>
+            
+            {paymentErrors.submit && <span className="error-message">{paymentErrors.submit}</span>}
+            
+            <button type="submit" disabled={isLoadingPayment} className={isLoadingPayment ? 'loading' : ''}>
+              {isLoadingPayment ? (
+                <><span className="spinner"></span>{t('payNow')} ({t('loading')})</>
+              ) : (
+                t('payNow')
+              )}
+            </button>
           </form>
           <div style={{ marginTop: 12 }}>
             {payments.length > 0 ? payments.map(payment => (
@@ -757,10 +1025,14 @@ function App() {
                 <div><strong>GHS {Number(payment.amount ?? 0).toFixed(2)}</strong> · {paymentStatusLabel(payment.status)}</div>
                 <div style={{ color: '#777', wordBreak: 'break-all' }}>{payment.reference}</div>
                 {payment.status !== 'released' && (
-                  <button type="button" onClick={() => releasePayment(payment.id)} style={{ marginTop: 6, background: '#2e7d32' }}>✅ {t('complete')}</button>
+                  <button type="button" onClick={() => releasePayment(payment.id)} disabled={isLoadingRelease} style={{ marginTop: 6, background: '#2e7d32' }} className={isLoadingRelease ? 'loading' : ''}>
+                    {isLoadingRelease ? <><span className="spinner"></span>({t('loading')})</> : <>✅ {t('complete')}</> }
+                  </button>
                 )}
                 {payment.status === 'paid' && (
-                  <button type="button" onClick={() => sendSellerSmsForPayment(payment)} style={{ marginTop: 6, background: '#1769aa' }}>📩 Send seller SMS</button>
+                  <button type="button" onClick={() => sendSellerSmsForPayment(payment)} disabled={isLoadingSendSms} style={{ marginTop: 6, background: '#1769aa' }} className={isLoadingSendSms ? 'loading' : ''}>
+                    {isLoadingSendSms ? <><span className="spinner"></span>({t('loading')})</> : <>📩 Send seller SMS</> }
+                  </button>
                 )}
               </div>
             )) : <p style={{ color: '#888' }}>{t('noPayments')}</p>}
@@ -772,8 +1044,11 @@ function App() {
                   onChange={e => setRetryReference(e.target.value)}
                   placeholder="ESCROW-..."
                   style={{ flex: 1, minWidth: 0 }}
+                  disabled={isLoadingRetry}
                 />
-                <button type="button" onClick={retryHeldPaymentByReference} style={{ whiteSpace: 'nowrap' }}>Retry</button>
+                <button type="button" onClick={retryHeldPaymentByReference} disabled={isLoadingRetry} style={{ whiteSpace: 'nowrap' }} className={isLoadingRetry ? 'loading' : ''}>
+                  {isLoadingRetry ? <><span className="spinner"></span>({t('loading')})</> : <>Retry</> }
+                </button>
               </div>
             </div>
           </div>
@@ -795,12 +1070,16 @@ function App() {
         <h2 style={{ marginTop: 0 }}>⭐ {t('ratings')}</h2>
         <div className="grid-2">
           <form onSubmit={submitRating}>
-            <label>{t('farmerId')}<br />
+            <label>{t('farmerId')}<span className="required-indicator">*</span><br />
               <input type="number" value={ratingForm.farmer_id}
                 onChange={e => { const id = Number(e.target.value); setRatingForm(r => ({ ...r, farmer_id: id })); fetchFarmerRatings(id); }}
-                required />
+                required className={ratingErrors.farmer_id ? 'error' : ''} />
             </label>
-            <label>Your name<br /><input value={ratingForm.rater_name} onChange={e => setRatingForm(r => ({ ...r, rater_name: e.target.value }))} required /></label>
+            {ratingErrors.farmer_id && <span className="error-message">{ratingErrors.farmer_id}</span>}
+            
+            <label>Your name<span className="required-indicator">*</span><br /><input value={ratingForm.rater_name} onChange={e => setRatingForm(r => ({ ...r, rater_name: e.target.value }))} required className={ratingErrors.rater_name ? 'error' : ''} /></label>
+            {ratingErrors.rater_name && <span className="error-message">{ratingErrors.rater_name}</span>}
+            
             <label>{t('yourRating')}<br />
               <select value={ratingForm.rating} onChange={e => setRatingForm(r => ({ ...r, rating: Number(e.target.value) }))}>
                 <option value="1">⭐ 1 — Poor</option>
@@ -810,8 +1089,19 @@ function App() {
                 <option value="5">⭐⭐⭐⭐⭐ 5 — Excellent</option>
               </select>
             </label>
-            <label>{t('yourReview')}<br /><textarea rows={3} value={ratingForm.review} onChange={e => setRatingForm(r => ({ ...r, review: e.target.value }))} required /></label>
-            <button type="submit">{t('submitRating')}</button>
+            
+            <label>{t('yourReview')}<span className="required-indicator">*</span><br /><textarea rows={3} value={ratingForm.review} onChange={e => setRatingForm(r => ({ ...r, review: e.target.value }))} required className={ratingErrors.review ? 'error' : ''} /></label>
+            {ratingErrors.review && <span className="error-message">{ratingErrors.review}</span>}
+            
+            {ratingErrors.submit && <span className="error-message">{ratingErrors.submit}</span>}
+            
+            <button type="submit" disabled={isLoadingRating} className={isLoadingRating ? 'loading' : ''}>
+              {isLoadingRating ? (
+                <><span className="spinner"></span>{t('submitRating')} ({t('loading')})</>
+              ) : (
+                t('submitRating')
+              )}
+            </button>
           </form>
           <div>
             <h3 style={{ marginTop: 0 }}>Farmer reviews</h3>
@@ -829,10 +1119,16 @@ function App() {
       <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
         <h2 style={{ marginTop: 0 }}>📟 {t('ussdTitle')}</h2>
         <form onSubmit={sendUssd} style={{ maxWidth: 480 }}>
-          <label>{t('ussdSession')}<br /><input value={ussdForm.session_id} onChange={e => setUssdForm(f => ({ ...f, session_id: e.target.value }))} placeholder="optional" /></label>
-          <label>{t('ussdPhone')}<br /><input value={ussdForm.phone_number} onChange={e => setUssdForm(f => ({ ...f, phone_number: e.target.value }))} required /></label>
-          <label>{t('ussdInput')}<br /><input value={ussdForm.input_text} onChange={e => setUssdForm(f => ({ ...f, input_text: e.target.value }))} required /></label>
-          <button type="submit">{t('sendUssd')}</button>
+          <label>{t('ussdSession')}<br /><input value={ussdForm.session_id} onChange={e => setUssdForm(f => ({ ...f, session_id: e.target.value }))} placeholder="optional" disabled={isLoadingUssd} /></label>
+          <label>{t('ussdPhone')}<br /><input value={ussdForm.phone_number} onChange={e => setUssdForm(f => ({ ...f, phone_number: e.target.value }))} required disabled={isLoadingUssd} /></label>
+          <label>{t('ussdInput')}<br /><input value={ussdForm.input_text} onChange={e => setUssdForm(f => ({ ...f, input_text: e.target.value }))} required disabled={isLoadingUssd} /></label>
+          <button type="submit" disabled={isLoadingUssd} className={isLoadingUssd ? 'loading' : ''}>
+            {isLoadingUssd ? (
+              <><span className="spinner"></span>{t('sendUssd')} ({t('loading')})</>
+            ) : (
+              t('sendUssd')
+            )}
+          </button>
         </form>
         {ussdResponse && (
           <div style={{ marginTop: 12, padding: 12, border: '1px solid #ccc', borderRadius: 10, background: '#f5f5f5', maxWidth: 480 }}>
