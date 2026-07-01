@@ -34,7 +34,7 @@ services:
       - key: AFRICASTALKING_API_KEY
         value: atsk_cc7f056bd3b7980235fada6ea1e3f24d80ba5df0aae7cdb71a4f4c52e7beb22e5f00e6aa
       - key: AFRICASTALKING_SENDER_ID
-        value: "SANDBOX"
+        value: "AGROSHARA"
       - key: SMS_PROVIDER
         value: africastalking
 
