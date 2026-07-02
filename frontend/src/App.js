@@ -26,8 +26,8 @@ const translations = {
     pricePerDay: 'Price per day',
     description: 'Description',
     addListing: 'Add listing',
-    farmerId: 'Farmer ID',
-    equipmentId: 'Equipment ID',
+    farmerId: 'Farmer number',
+    equipmentId: 'Equipment number',
     rentalDate: 'Rental date',
     bookEquipment: 'Book equipment',
     poolStatus: 'Pool status',
@@ -70,7 +70,7 @@ const translations = {
     yearly: 'Yearly',
     save: 'Save 17%',
     subscribe: 'Subscribe now',
-    subscriptionFarmerId: 'Farmer ID for subscription',
+    subscriptionFarmerId: 'Your farmer number',
     ownerActivity: 'Owner activity feed',
     noActivity: 'No activity yet.',
     subscriptions: 'Subscriptions',
@@ -120,7 +120,7 @@ const translations = {
     disputeResolution: 'Dispute Resolution',
     filterBookings: 'Filter Bookings',
     filterPayments: 'Filter Payments',
-    bookingId: 'Booking ID',
+    bookingId: 'Booking number',
     status: 'Status',
     amount: 'Amount',
     method: 'Method',
@@ -147,8 +147,8 @@ const translations = {
     pricePerDay: 'Boɔ da biara',
     description: 'Nkyerɛmu',
     addListing: 'Fa kyerɛw nsɛm',
-    farmerId: 'Afuwfoɔ ID',
-    equipmentId: 'Akode ID',
+    farmerId: 'Afuwfoɔ nɔma',
+    equipmentId: 'Akode nɔma',
     rentalDate: 'Bere a wɔbɛfa no',
     bookEquipment: 'Bɔ akode no',
     poolStatus: 'Pool status',
@@ -191,7 +191,7 @@ const translations = {
     yearly: 'Afe biara',
     save: 'Gye 17%',
     subscribe: 'Bɔ ho',
-    subscriptionFarmerId: 'Afuwfo ID ma subscription',
+    subscriptionFarmerId: 'Wo afuwfoɔ nɔma',
     ownerActivity: 'Wura adwuma amanneɛbɔ',
     noActivity: 'Amanneɛbɔ biara nni hɔ.',
     subscriptions: 'Subscriptions',
@@ -241,7 +241,7 @@ const translations = {
     disputeResolution: 'Asɛm Pagyefo',
     filterBookings: 'Fa wɔ Bere mu',
     filterPayments: 'Fa wɔ Sika bobɔ mu',
-    bookingId: 'Bere ID',
+    bookingId: 'Bere nɔma',
     status: 'Status',
     amount: 'Sika',
     method: 'Akwan',
@@ -514,7 +514,7 @@ function App() {
       setSubscriptionForm(s => ({ ...s, farmer_id: String(data.id), mobile_number: data.phone }));
       setForm({ name: '', phone: '', district: 'Greater Accra', password: '', latitude: null, longitude: null, payout_account_type: 'mobile_money', payout_bank_code: 'MTN', payout_account_number: '' });
       setFarmerErrors({});
-      showNotice('success', `✅ Farmer "${data.name}" registered! Farmer ID: ${data.id}`);
+      showNotice('success', `✅ Farmer "${data.name}" registered! Farmer number: ${data.id}`);
     } catch (err) {
       setFarmerErrors({ submit: 'Network error. Please try again.' });
       showNotice('error', '❌ Network error. Please try again.');
@@ -526,13 +526,13 @@ function App() {
   const submitEquipment = async e => {
     e.preventDefault();
     if (!equipmentForm.owner_farmer_id) {
-      setEquipmentErrors({ owner_farmer_id: 'Enter your Farmer ID after subscribing to unlock listings.' });
-      showNotice('error', '❌ Pay the listing fee first, then enter your Farmer ID to unlock this form.');
+      setEquipmentErrors({ owner_farmer_id: 'Enter your farmer number after paying to unlock listings.' });
+      showNotice('error', '❌ Pay the listing fee first, then enter your farmer number to unlock this form.');
       return;
     }
 
     if (!hasPaidListingAccess(equipmentForm.owner_farmer_id)) {
-      setEquipmentErrors({ owner_farmer_id: 'No paid subscription found for this Farmer ID.' });
+      setEquipmentErrors({ owner_farmer_id: 'No paid subscription found for this farmer number.' });
       showNotice('error', '❌ You need a paid subscription before listing equipment or uploading photos.');
       return;
     }
@@ -557,7 +557,7 @@ function App() {
       setEquipment(eq => [...eq, data]);
       setEquipmentForm({ owner_name: '', owner_farmer_id: '', type: '', category: 'other', district, price_per_day: '', description: '' });
       setEquipmentErrors({});
-      showNotice('success', `✅ Equipment listed! Equipment ID: ${data.id}`);
+      showNotice('success', `✅ Equipment listed! Equipment number: ${data.id}`);
     } catch (err) {
       setEquipmentErrors({ submit: 'Network error. Please try again.' });
       showNotice('error', '❌ Network error. Please try again.');
@@ -582,7 +582,7 @@ function App() {
       }
       setBookingForm({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
       setBookingErrors({});
-      showNotice('success', `✅ Booking created! Booking ID: ${data.id}`);
+      showNotice('success', `✅ Booking created! Booking number: ${data.id}`);
     } catch (err) {
       setBookingErrors({ submit: 'Network error. Please try again.' });
       showNotice('error', '❌ Network error. Please try again.');
@@ -608,7 +608,7 @@ function App() {
       setRentalPools(p => { const ex = p.find(x => x.id === data.id); return ex ? p.map(x => x.id === data.id ? data : x) : [...p, data]; });
       setPoolForm({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
       setPoolErrors({});
-      showNotice('success', `✅ Rental pool created! Pool ID: ${data.id}`);
+      showNotice('success', `✅ Rental pool created! Pool number: ${data.id}`);
     } catch (err) {
       setPoolErrors({ submit: 'Network error. Please try again.' });
       showNotice('error', '❌ Network error. Please try again.');
@@ -627,8 +627,8 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setPaymentErrors({ submit: data.detail || 'Unable to create payment. Check the booking ID and try again.' });
-        showNotice('error', `❌ ${data.detail || 'Unable to create payment. Check the booking ID and try again.'}`);
+        setPaymentErrors({ submit: data.detail || 'Unable to create payment. Check the booking number and try again.' });
+        showNotice('error', `❌ ${data.detail || 'Unable to create payment. Check the booking number and try again.'}`);
         return;
       }
       setPayments(p => [...p, data]);
@@ -653,7 +653,7 @@ function App() {
 
   const submitSubscription = async plan => {
     if (!subscriptionForm.farmer_id || !subscriptionForm.mobile_number) {
-      showNotice('error', 'Enter Farmer ID and mobile number before subscribing.');
+      showNotice('error', 'Enter your farmer number and mobile number before subscribing.');
       return;
     }
 
@@ -1168,14 +1168,14 @@ function App() {
           <h2>🚜 {t('listEquipment')}</h2>
           <div style={{ marginBottom: 12, padding: 12, borderRadius: 10, border: '1px solid #d7c27a', background: equipmentListingUnlocked ? '#edf7ed' : '#fff7e6', color: '#3d3d3d', fontSize: '0.92rem' }}>
             {equipmentListingUnlocked
-              ? `Paid access active for Farmer ID ${equipmentForm.owner_farmer_id}. You can list equipment and upload photos.`
-              : 'Pay the listing fee first in the subscription section, then enter the same Farmer ID here to unlock this form and photo uploads.'}
+              ? `Paid access active for farmer number ${equipmentForm.owner_farmer_id}. You can list equipment and upload photos.`
+              : 'Pay the listing fee first in the subscription section, then enter the same farmer number here to unlock this form and photo uploads.'}
           </div>
           <form onSubmit={submitEquipment}>
             <label>{t('ownerName')}<span className="required-indicator">*</span><br /><input value={equipmentForm.owner_name} onChange={e => setEquipmentForm(f => ({ ...f, owner_name: e.target.value }))} required className={equipmentErrors.owner_name ? 'error' : ''} /></label>
             {equipmentErrors.owner_name && <span className="error-message">{equipmentErrors.owner_name}</span>}
             
-            <label>Owner Farmer ID (for payout routing)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" className={equipmentErrors.owner_farmer_id ? 'error' : ''} /></label>
+            <label>Owner farmer number (for payout)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" className={equipmentErrors.owner_farmer_id ? 'error' : ''} /></label>
             {equipmentErrors.owner_farmer_id && <span className="error-message">{equipmentErrors.owner_farmer_id}</span>}
 
             <fieldset disabled={!equipmentListingUnlocked || isLoadingEquipment} style={{ border: 'none', padding: 0, margin: 0 }}>
@@ -1361,7 +1361,7 @@ function App() {
             <div key={pool.id} style={{ marginBottom: 10, padding: 12, border: '1px solid #e0e0e0', borderRadius: 8, background: '#fafafa' }}>
               <div><strong>Pool #{pool.id}</strong> — <span style={{ color: pool.status === 'ready' ? '#2e7d32' : '#888' }}>{t(pool.status)}</span></div>
               <div style={{ fontSize: '0.86rem', color: '#555' }}>📍 {pool.district} · 📅 {pool.rental_date}</div>
-              <div style={{ fontSize: '0.86rem' }}>Equipment: {pool.equipment_id} · Farmers: {Array.isArray(pool.farmer_ids) ? pool.farmer_ids.join(', ') : pool.farmer_ids}</div>
+              <div style={{ fontSize: '0.86rem' }}>Equipment number: {pool.equipment_id} · Farmers: {Array.isArray(pool.farmer_ids) ? pool.farmer_ids.join(', ') : pool.farmer_ids}</div>
             </div>
           )) : <p style={{ color: '#888' }}>{t('noPools')}</p>}
         </div>
@@ -1473,7 +1473,7 @@ function App() {
         <div style={card}>
           <h2>💳 {t('payments')}</h2>
           <form onSubmit={submitPayment}>
-            <label>Booking ID<span className="required-indicator">*</span><br /><input type="number" value={paymentForm.booking_id} onChange={e => setPaymentForm(f => ({ ...f, booking_id: Number(e.target.value) }))} required className={paymentErrors.booking_id ? 'error' : ''} /></label>
+            <label>Booking number<span className="required-indicator">*</span><br /><input type="number" value={paymentForm.booking_id} onChange={e => setPaymentForm(f => ({ ...f, booking_id: Number(e.target.value) }))} required className={paymentErrors.booking_id ? 'error' : ''} /></label>
             {paymentErrors.booking_id && <span className="error-message">{paymentErrors.booking_id}</span>}
             
             <label>{t('mobileNumber')}<span className="required-indicator">*</span><br /><input value={paymentForm.mobile_number} onChange={e => setPaymentForm(f => ({ ...f, mobile_number: e.target.value }))} required className={paymentErrors.mobile_number ? 'error' : ''} /></label>
