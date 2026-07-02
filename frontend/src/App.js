@@ -42,7 +42,7 @@ const translations = {
     howStep1: '1. Register as a farmer with your name, phone, and district.',
     howStep2: '2. List your equipment or browse equipment from other farmers.',
     howStep3: '3. Book equipment you need or create a rental pool to share costs with others.',
-    howStep4: '4. Pay securely using Paystack, Mobile Money, or Credit Card.',
+    howStep4: '4. Contact the seller, book equipment, and arrange pickup or return details directly.',
     ussdTitle: 'USSD interface',
     ussdPhone: 'Phone number',
     ussdSession: 'Session ID',
@@ -163,7 +163,7 @@ const translations = {
     howStep1: '1. Kyerɛw ɔko wɔ din, fɔn, ne mantam mu.',
     howStep2: '2. Kyerɛw akode anaa hwɛ akode a afuwfoɔ foforɔ wɔ.',
     howStep3: '3. Fa akode a wopɛ anaa bɔ nkɔmɔ pool sɛ wobebu sika mu.',
-    howStep4: '4. Tua sika a ɛdi dwuma deɛ wɔde Paystack, Mobile Money, anaa Credit Card.',
+    howStep4: '4. Frɛ ɔwura no, bɔ akode no, na yɛ nhyehyɛe a wɔde bɛfa anaa de bɛsan de no.',
     ussdTitle: 'USSD interface',
     ussdPhone: 'Fɔn nɔma',
     ussdSession: 'Session ID',
@@ -269,7 +269,6 @@ function App() {
   const [equipmentForm, setEquipmentForm] = useState({ owner_name: '', owner_farmer_id: '', type: '', category: 'other', district: 'Greater Accra', price_per_day: '', description: '' });
   const [bookingForm, setBookingForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [poolForm, setPoolForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
-  const [paymentForm, setPaymentForm] = useState({ booking_id: '', mobile_number: '', method: 'paystack' });
   const [retryReference, setRetryReference] = useState('');
   const [subscriptionForm, setSubscriptionForm] = useState({ farmer_id: '', mobile_number: '' });
   const [ussdForm, setUssdForm] = useState({ session_id: localStorage.getItem('ussdSession') || '', phone_number: '', input_text: '' });
@@ -283,7 +282,6 @@ function App() {
   const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
   const [isLoadingBooking, setIsLoadingBooking] = useState(false);
   const [isLoadingPool, setIsLoadingPool] = useState(false);
-  const [isLoadingPayment, setIsLoadingPayment] = useState(false);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(false);
   const [isLoadingRating, setIsLoadingRating] = useState(false);
   const [isLoadingUssd, setIsLoadingUssd] = useState(false);
@@ -296,7 +294,6 @@ function App() {
   const [equipmentErrors, setEquipmentErrors] = useState({});
   const [bookingErrors, setBookingErrors] = useState({});
   const [poolErrors, setPoolErrors] = useState({});
-  const [paymentErrors, setPaymentErrors] = useState({});
   const [ratingErrors, setRatingErrors] = useState({});
   
   // Phase 3: Search & Filters states
@@ -709,40 +706,6 @@ function App() {
       showNotice('error', '❌ Network error. Please try again.');
     } finally {
       setIsLoadingPool(false);
-    }
-  };
-
-  const submitPayment = async e => {
-    e.preventDefault();
-    setIsLoadingPayment(true);
-    setPaymentErrors({});
-    try {
-      const res = await fetch(`${API_BASE}/payments/`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(paymentForm),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setPaymentErrors({ submit: data.detail || 'Unable to create payment. Check the booking number and try again.' });
-        showNotice('error', `❌ ${data.detail || 'Unable to create payment. Check the booking number and try again.'}`);
-        return;
-      }
-      setPayments(p => [...p, data]);
-      refreshOwnerActivity();
-
-      if (data.checkout_url) {
-        showNotice('success', 'Redirecting to Paystack checkout...');
-        window.location.assign(data.checkout_url);
-        return;
-      }
-
-      setPaymentForm({ booking_id: '', mobile_number: '', method: 'paystack' });
-      setPaymentErrors({});
-      showNotice('success', `✅ Payment of GHS ${Number(data.amount).toFixed(2)} created! Reference: ${data.reference}`);
-    } catch (err) {
-      setPaymentErrors({ submit: 'Network error. Please try again.' });
-      showNotice('error', '❌ Network error. Please try again.');
-    } finally {
-      setIsLoadingPayment(false);
     }
   };
 
@@ -1589,7 +1552,7 @@ function App() {
         </section>
       )}
 
-      {/* ── Create Pool, Create Booking, Payments ── */}
+      {/* ── Create Pool, Create Booking ── */}
       <div className="grid-3" style={{ marginBottom: 14 }}>
         <div style={card}>
           <h2>🤝 {t('createPool')}</h2>
@@ -1654,62 +1617,7 @@ function App() {
           </form>
         </div>
 
-        <div style={card}>
-          <h2>💳 {t('payments')}</h2>
-          <form onSubmit={submitPayment}>
-            <label>Booking number<span className="required-indicator">*</span><br /><input type="number" value={paymentForm.booking_id} onChange={e => setPaymentForm(f => ({ ...f, booking_id: Number(e.target.value) }))} required className={paymentErrors.booking_id ? 'error' : ''} /></label>
-            {paymentErrors.booking_id && <span className="error-message">{paymentErrors.booking_id}</span>}
-            
-            <label>{t('mobileNumber')}<span className="required-indicator">*</span><br /><input value={paymentForm.mobile_number} onChange={e => setPaymentForm(f => ({ ...f, mobile_number: e.target.value }))} required className={paymentErrors.mobile_number ? 'error' : ''} /></label>
-            {paymentErrors.mobile_number && <span className="error-message">{paymentErrors.mobile_number}</span>}
-            
-            <label>Payment method<br />
-              <select value={paymentForm.method} onChange={e => setPaymentForm(f => ({ ...f, method: e.target.value }))}>
-                <option value="paystack">Paystack</option>
-                <option value="mobile_money">Mobile Money</option>
-                <option value="credit_card">Credit Card</option>
-              </select>
-            </label>
-            
-            {paymentErrors.submit && <span className="error-message">{paymentErrors.submit}</span>}
-            
-            <button type="submit" disabled={isLoadingPayment} className={isLoadingPayment ? 'loading' : ''}>
-              {isLoadingPayment ? (
-                <><span className="spinner"></span>{t('payNow')} ({t('loading')})</>
-              ) : (
-                t('payNow')
-              )}
-            </button>
-          </form>
-          <div style={{ marginTop: 12 }}>
-            {payments.length > 0 ? payments.map(payment => (
-              <div key={payment.id} style={{ marginBottom: 10, padding: 10, border: '1px solid #e0e0e0', borderRadius: 8, background: '#fafafa', fontSize: '0.88rem' }}>
-                <div><strong>GHS {Number(payment.amount ?? 0).toFixed(2)}</strong> · {paymentStatusLabel(payment.status)}</div>
-                <div style={{ color: '#777', wordBreak: 'break-all' }}>{payment.reference}</div>
-                {payment.status !== 'released' && (
-                  <button type="button" onClick={() => releasePayment(payment.id)} disabled={isLoadingRelease} style={{ marginTop: 6, background: '#2e7d32' }} className={isLoadingRelease ? 'loading' : ''}>
-                    {isLoadingRelease ? <><span className="spinner"></span>({t('loading')})</> : <>✅ {t('complete')}</> }
-                  </button>
-                )}
-              </div>
-            )) : <p style={{ color: '#888' }}>{t('noPayments')}</p>}
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #ddd' }}>
-              <div style={{ fontSize: '0.84rem', color: '#555', marginBottom: 6 }}>Admin retry payment verification by reference</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  value={retryReference}
-                  onChange={e => setRetryReference(e.target.value)}
-                  placeholder="ESCROW-..."
-                  style={{ flex: 1, minWidth: 0 }}
-                  disabled={isLoadingRetry}
-                />
-                <button type="button" onClick={retryHeldPaymentByReference} disabled={isLoadingRetry} style={{ whiteSpace: 'nowrap' }} className={isLoadingRetry ? 'loading' : ''}>
-                  {isLoadingRetry ? <><span className="spinner"></span>({t('loading')})</> : <>Retry</> }
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        
       </div>
 
       {/* ── Farmer Locations Map (OpenStreetMap / Leaflet) ── */}
