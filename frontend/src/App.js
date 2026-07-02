@@ -1137,7 +1137,7 @@ function App() {
             <label>Payout network/bank code<br /><input value={form.payout_bank_code} onChange={e => setForm(f => ({ ...f, payout_bank_code: e.target.value }))} placeholder="e.g. MTN" className={farmerErrors.payout_bank_code ? 'error' : ''} /></label>
             {farmerErrors.payout_bank_code && <span className="error-message">{farmerErrors.payout_bank_code}</span>}
             
-            <label>Payout account number (optional now, required for auto payout)<br /><input value={form.payout_account_number} onChange={e => setForm(f => ({ ...f, payout_account_number: e.target.value }))} placeholder="e.g. 0246326373" className={farmerErrors.payout_account_number ? 'error' : ''} /></label>
+            <label>Mobile Money/Bank account number (where you receive money)<br /><input value={form.payout_account_number} onChange={e => setForm(f => ({ ...f, payout_account_number: e.target.value }))} placeholder="e.g. 0246326373" className={farmerErrors.payout_account_number ? 'error' : ''} /></label>
             {farmerErrors.payout_account_number && <span className="error-message">{farmerErrors.payout_account_number}</span>}
             
             <label>{t('district')}<br />
@@ -1175,7 +1175,7 @@ function App() {
             <label>{t('ownerName')}<span className="required-indicator">*</span><br /><input value={equipmentForm.owner_name} onChange={e => setEquipmentForm(f => ({ ...f, owner_name: e.target.value }))} required className={equipmentErrors.owner_name ? 'error' : ''} /></label>
             {equipmentErrors.owner_name && <span className="error-message">{equipmentErrors.owner_name}</span>}
             
-            <label>Owner farmer number (for payout)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" className={equipmentErrors.owner_farmer_id ? 'error' : ''} /></label>
+            <label>Your farmer number (from registration)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" className={equipmentErrors.owner_farmer_id ? 'error' : ''} /></label>
             {equipmentErrors.owner_farmer_id && <span className="error-message">{equipmentErrors.owner_farmer_id}</span>}
 
             <fieldset disabled={!equipmentListingUnlocked || isLoadingEquipment} style={{ border: 'none', padding: 0, margin: 0 }}>
