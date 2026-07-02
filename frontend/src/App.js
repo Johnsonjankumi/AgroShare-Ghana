@@ -343,6 +343,36 @@ function App() {
     return subscriptions.some(subscription => subscription.farmer_id === numericFarmerId && String(subscription.status).toLowerCase() === 'paid');
   };
 
+  const getActiveSubscription = farmerId => {
+    const numericFarmerId = Number(farmerId);
+    if (!Number.isInteger(numericFarmerId) || numericFarmerId <= 0) return null;
+    return subscriptions.find(subscription => subscription.farmer_id === numericFarmerId && String(subscription.status).toLowerCase() === 'paid') || null;
+  };
+
+  const isVerifiedSeller = farmerId => Boolean(getActiveSubscription(farmerId));
+
+  const getSellerRank = farmerId => {
+    const subscription = getActiveSubscription(farmerId);
+    if (!subscription) return 0;
+    return String(subscription.plan).toLowerCase() === 'yearly' ? 2 : 1;
+  };
+
+  const getSellerLabel = farmerId => {
+    const subscription = getActiveSubscription(farmerId);
+    if (!subscription) return 'Standard seller';
+    return String(subscription.plan).toLowerCase() === 'yearly' ? 'Gold verified seller' : 'Verified seller';
+  };
+
+  const getFarmerListings = farmerId => equipment.filter(item => Number(item.owner_farmer_id) === Number(farmerId));
+
+  const getBusinessProfileFarmers = () => {
+    const paidIds = [...new Set(subscriptions.filter(sub => String(sub.status).toLowerCase() === 'paid').map(sub => Number(sub.farmer_id)).filter(id => Number.isInteger(id) && id > 0))];
+    return paidIds
+      .map(farmerId => farmers.find(farmer => farmer.id === farmerId))
+      .filter(Boolean)
+      .sort((a, b) => getSellerRank(b.id) - getSellerRank(a.id) || a.name.localeCompare(b.name));
+  };
+
   // Auto-dismiss notification after 5 seconds
   const showNotice = (type, text) => setNotice({ type, text });
   useEffect(() => {
@@ -430,7 +460,7 @@ function App() {
 
   // Phase 3: Apply search and filter logic
   useEffect(() => {
-    let filtered = equipment;
+    let filtered = [...equipment];
     
     // Filter by search term (equipment type, owner name, or description)
     if (searchTerm.trim()) {
@@ -454,9 +484,17 @@ function App() {
       const price = parseFloat(item.price_per_day || 0);
       return price >= min && price <= max;
     });
+
+    // Keep paid sellers at the top so verified listings surface first.
+    filtered.sort((left, right) => {
+      const rightRank = getSellerRank(right.owner_farmer_id);
+      const leftRank = getSellerRank(left.owner_farmer_id);
+      if (rightRank !== leftRank) return rightRank - leftRank;
+      return (right.created_at || '').localeCompare(left.created_at || '');
+    });
     
     setFilteredEquipment(filtered);
-  }, [equipment, searchTerm, selectedCategory, priceMin, priceMax]);
+  }, [equipment, searchTerm, selectedCategory, priceMin, priceMax, subscriptions]);
 
   // Phase 3: Get autocomplete suggestions
   const getAutocompleteSuggestions = () => {
@@ -1391,7 +1429,12 @@ function App() {
                 <strong>{item.type}</strong>{' '}
                 {item.category && <span style={{ background: '#e8f5e9', color: '#2e7d32', borderRadius: 4, padding: '2px 6px', fontSize: '0.78rem' }}>{item.category}</span>}
               </div>
-              <div style={{ color: '#555', fontSize: '0.88rem' }}>📍 {item.district} · 👤 {item.owner_name}</div>
+                <div style={{ color: '#555', fontSize: '0.88rem' }}>📍 {item.district} · 👤 {item.owner_name}</div>
+              {isVerifiedSeller(item.owner_farmer_id) && (
+                <div style={{ marginTop: 6, display: 'inline-flex', gap: 6, alignItems: 'center', padding: '4px 8px', borderRadius: 999, background: getSellerRank(item.owner_farmer_id) === 2 ? '#fff3cd' : '#e8f5e9', color: getSellerRank(item.owner_farmer_id) === 2 ? '#8a5b00' : '#2e7d32', fontSize: '0.78rem', fontWeight: 700 }}>
+                  {getSellerRank(item.owner_farmer_id) === 2 ? '⭐ Gold verified seller' : '✅ Verified seller'}
+                </div>
+              )}
               <div style={{ fontWeight: 700, color: '#1769aa' }}>GHS {Number(item.price_per_day ?? 0).toFixed(2)} / day</div>
               {item.description && <div style={{ fontSize: '0.85rem', color: '#666' }}>{item.description}</div>}
 
@@ -1551,6 +1594,48 @@ function App() {
           </div>
         </section>
       )}
+
+      {/* ── Free business profiles ── */}
+      <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+        <h2 style={{ marginTop: 0 }}>🏪 Free business profile pages</h2>
+        <p style={{ marginTop: 0, color: '#555', fontSize: '0.88rem' }}>Paid sellers get a simple public profile page with their contact, badge, and listings.</p>
+        {getBusinessProfileFarmers().length > 0 ? (
+          <div className="grid-2">
+            {getBusinessProfileFarmers().map(farmer => {
+              const listings = getFarmerListings(farmer.id);
+              const subscription = getActiveSubscription(farmer.id);
+              return (
+                <div key={farmer.id} style={{ border: '1px solid #e0e0e0', borderRadius: 12, padding: 14, background: subscription?.plan === 'yearly' ? '#fff8e1' : '#f7fbff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '1rem' }}>{farmer.name}</div>
+                      <div style={{ fontSize: '0.86rem', color: '#555' }}>📍 {farmer.district}</div>
+                      <div style={{ fontSize: '0.86rem', color: '#555' }}>📞 {maskPhone(farmer.phone)}</div>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, padding: '4px 8px', borderRadius: 999, background: subscription?.plan === 'yearly' ? '#fff3cd' : '#e8f5e9', color: subscription?.plan === 'yearly' ? '#8a5b00' : '#2e7d32' }}>
+                      {getSellerLabel(farmer.id)}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: '0.86rem', color: '#333' }}>
+                    <strong>{listings.length}</strong> equipment listing{listings.length === 1 ? '' : 's'}
+                  </div>
+                  <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                    {listings.slice(0, 3).map(item => (
+                      <div key={item.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.9)', border: '1px solid #ececec' }}>
+                        <div style={{ fontWeight: 600 }}>{item.type}</div>
+                        <div style={{ fontSize: '0.84rem', color: '#555' }}>GHS {Number(item.price_per_day ?? 0).toFixed(2)} / day · {item.district}</div>
+                      </div>
+                    ))}
+                    {listings.length === 0 && <div style={{ fontSize: '0.84rem', color: '#777' }}>No listings yet.</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ color: '#777' }}>No paid seller profiles yet.</div>
+        )}
+      </section>
 
       {/* ── Create Pool, Create Booking ── */}
       <div className="grid-3" style={{ marginBottom: 14 }}>
