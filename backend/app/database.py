@@ -176,6 +176,16 @@ class Subscription(Base):
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    equipment_id = Column(Integer, index=True)
+    sender_name = Column(String)
+    sender_phone = Column(String)
+    message = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 ensure_legacy_schema_compatibility()

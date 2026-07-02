@@ -29,6 +29,7 @@ class Equipment(BaseModel):
     price_per_day: float
     description: str
     photo_url: Optional[str] = None
+    owner_phone_masked: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -48,6 +49,15 @@ def _has_paid_listing_access(db: Session, farmer_id: int) -> bool:
     )
     return subscription is not None
 
+
+def _mask_phone(phone: Optional[str]) -> Optional[str]:
+    if not phone:
+        return None
+    clean = ''.join(ch for ch in phone if ch.isdigit())
+    if len(clean) < 4:
+        return phone
+    return f"{clean[:3]}****{clean[-3:]}"
+
 @router.post("/", response_model=Equipment)
 def create_equipment(item: EquipmentCreate, db: Session = Depends(get_db)):
     if not item.owner_farmer_id:
@@ -60,7 +70,23 @@ def create_equipment(item: EquipmentCreate, db: Session = Depends(get_db)):
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
-    return new_item
+    masked_phone = None
+    if new_item.owner_farmer_id:
+        owner = db.query(FarmerModel).filter(FarmerModel.id == new_item.owner_farmer_id).first()
+        masked_phone = _mask_phone(owner.phone if owner else None)
+
+    return {
+        "id": new_item.id,
+        "owner_name": new_item.owner_name,
+        "owner_farmer_id": new_item.owner_farmer_id,
+        "type": new_item.type,
+        "category": new_item.category,
+        "district": new_item.district,
+        "price_per_day": new_item.price_per_day,
+        "description": new_item.description,
+        "photo_url": new_item.photo_url,
+        "owner_phone_masked": masked_phone,
+    }
 
 @router.post("/upload/{equipment_id}")
 async def upload_equipment_photo(equipment_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -104,4 +130,45 @@ def list_equipment(district: str = None, category: str = None, db: Session = Dep
         query = query.filter(EquipmentModel.district.ilike(district))
     if category:
         query = query.filter(EquipmentModel.category.ilike(category))
-    return query.all()
+
+    items = query.all()
+    owner_ids = {item.owner_farmer_id for item in items if item.owner_farmer_id}
+    owners = {}
+    if owner_ids:
+        owners = {
+            farmer.id: farmer
+            for farmer in db.query(FarmerModel).filter(FarmerModel.id.in_(owner_ids)).all()
+        }
+
+    return [
+        {
+            "id": item.id,
+            "owner_name": item.owner_name,
+            "owner_farmer_id": item.owner_farmer_id,
+            "type": item.type,
+            "category": item.category,
+            "district": item.district,
+            "price_per_day": item.price_per_day,
+            "description": item.description,
+            "photo_url": item.photo_url,
+            "owner_phone_masked": _mask_phone(owners[item.owner_farmer_id].phone)
+            if item.owner_farmer_id in owners else None,
+        }
+        for item in items
+    ]
+
+
+@router.get("/{equipment_id}/seller-phone")
+def get_seller_phone(equipment_id: int, db: Session = Depends(get_db)):
+    equipment = db.query(EquipmentModel).filter(EquipmentModel.id == equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+
+    if not equipment.owner_farmer_id:
+        raise HTTPException(status_code=404, detail="Seller contact is not available for this listing")
+
+    owner = db.query(FarmerModel).filter(FarmerModel.id == equipment.owner_farmer_id).first()
+    if not owner or not owner.phone:
+        raise HTTPException(status_code=404, detail="Seller contact is not available for this listing")
+
+    return {"phone": owner.phone, "masked_phone": _mask_phone(owner.phone)}

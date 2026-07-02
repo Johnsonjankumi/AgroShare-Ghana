@@ -307,6 +307,12 @@ function App() {
   const [filteredEquipment, setFilteredEquipment] = useState([]);
   const [showAutoComplete, setShowAutoComplete] = useState(false);
   const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('favoriteEquipment')) || []);
+  const [revealedSellerPhones, setRevealedSellerPhones] = useState({});
+  const [chatByEquipment, setChatByEquipment] = useState({});
+  const [chatDraftByEquipment, setChatDraftByEquipment] = useState({});
+  const [chatOpenByEquipment, setChatOpenByEquipment] = useState({});
+  const [chatLoadingByEquipment, setChatLoadingByEquipment] = useState({});
+  const [chatSendingByEquipment, setChatSendingByEquipment] = useState({});
   
   // Phase 4: Ratings filter state
   const [minRatingFilter, setMinRatingFilter] = useState(0);
@@ -472,6 +478,95 @@ function App() {
     setFavorites(newFavorites);
     localStorage.setItem('favoriteEquipment', JSON.stringify(newFavorites));
     showNotice('success', favorites.includes(equipmentId) ? '❤️ Removed from favorites' : '❤️ Added to favorites');
+  };
+
+  const maskPhone = phone => {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length < 7) return phone || 'Not available';
+    return `${digits.slice(0, 3)}****${digits.slice(-3)}`;
+  };
+
+  const revealSellerPhone = async equipmentId => {
+    if (revealedSellerPhones[equipmentId]) return;
+    try {
+      const res = await fetch(`${API_BASE}/equipment/${equipmentId}/seller-phone`);
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Seller contact is not available right now.'}`);
+        return;
+      }
+      setRevealedSellerPhones(prev => ({ ...prev, [equipmentId]: data.phone }));
+      showNotice('success', '✅ Seller phone revealed. Call or message the seller directly.');
+    } catch (err) {
+      showNotice('error', '❌ Unable to load seller contact right now.');
+    }
+  };
+
+  const ensureChatDraft = equipmentId => {
+    if (chatDraftByEquipment[equipmentId]) return chatDraftByEquipment[equipmentId];
+    return { sender_name: '', sender_phone: '', message: '' };
+  };
+
+  const loadEquipmentChat = async equipmentId => {
+    setChatLoadingByEquipment(prev => ({ ...prev, [equipmentId]: true }));
+    try {
+      const res = await fetch(`${API_BASE}/chats/equipment/${equipmentId}`);
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Unable to load chat messages.'}`);
+        return;
+      }
+      setChatByEquipment(prev => ({ ...prev, [equipmentId]: data }));
+    } catch (err) {
+      showNotice('error', '❌ Unable to load chat messages.');
+    } finally {
+      setChatLoadingByEquipment(prev => ({ ...prev, [equipmentId]: false }));
+    }
+  };
+
+  const toggleEquipmentChat = equipmentId => {
+    const willOpen = !chatOpenByEquipment[equipmentId];
+    setChatOpenByEquipment(prev => ({ ...prev, [equipmentId]: willOpen }));
+
+    if (willOpen && !chatByEquipment[equipmentId]) {
+      loadEquipmentChat(equipmentId);
+    }
+  };
+
+  const submitEquipmentChatMessage = async equipmentId => {
+    const draft = ensureChatDraft(equipmentId);
+    if (!draft.sender_name.trim() || !draft.sender_phone.trim() || !draft.message.trim()) {
+      showNotice('error', '❌ Enter your name, phone number, and message before sending chat.');
+      return;
+    }
+
+    setChatSendingByEquipment(prev => ({ ...prev, [equipmentId]: true }));
+    try {
+      const res = await fetch(`${API_BASE}/chats/equipment/${equipmentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Unable to send chat message.'}`);
+        return;
+      }
+
+      setChatByEquipment(prev => ({
+        ...prev,
+        [equipmentId]: [...(prev[equipmentId] || []), data],
+      }));
+      setChatDraftByEquipment(prev => ({
+        ...prev,
+        [equipmentId]: { ...draft, message: '' },
+      }));
+      showNotice('success', '✅ Chat message sent.');
+    } catch (err) {
+      showNotice('error', '❌ Unable to send chat message right now.');
+    } finally {
+      setChatSendingByEquipment(prev => ({ ...prev, [equipmentId]: false }));
+    }
   };
 
   const getMyLocation = () => {
@@ -1336,6 +1431,95 @@ function App() {
               <div style={{ color: '#555', fontSize: '0.88rem' }}>📍 {item.district} · 👤 {item.owner_name}</div>
               <div style={{ fontWeight: 700, color: '#1769aa' }}>GHS {Number(item.price_per_day ?? 0).toFixed(2)} / day</div>
               {item.description && <div style={{ fontSize: '0.85rem', color: '#666' }}>{item.description}</div>}
+
+              <div style={{ marginTop: 8, padding: 10, background: '#f6fbff', border: '1px solid #d6e8f7', borderRadius: 8 }}>
+                <div style={{ fontSize: '0.84rem', color: '#0f4c75', marginBottom: 6 }}>
+                  Seller contact: {revealedSellerPhones[item.id] || item.owner_phone_masked || 'Not available'}
+                </div>
+                {!revealedSellerPhones[item.id] && item.owner_phone_masked && (
+                  <button
+                    type="button"
+                    onClick={() => revealSellerPhone(item.id)}
+                    style={{ background: '#1769aa', fontSize: '0.82rem', padding: '8px 10px', width: 'auto' }}
+                  >
+                    Contact seller (show full number)
+                  </button>
+                )}
+              </div>
+
+              <div style={{ marginTop: 8, padding: 10, background: '#fafafa', border: '1px solid #ececec', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <strong style={{ fontSize: '0.88rem' }}>Chat with seller</strong>
+                  <button
+                    type="button"
+                    onClick={() => toggleEquipmentChat(item.id)}
+                    style={{ width: 'auto', fontSize: '0.82rem', padding: '7px 10px', background: '#2e7d32' }}
+                  >
+                    {chatOpenByEquipment[item.id] ? 'Hide chat' : 'Open chat'}
+                  </button>
+                </div>
+
+                {chatOpenByEquipment[item.id] && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #e4e4e4', borderRadius: 6, padding: 8, background: 'white', marginBottom: 8 }}>
+                      {chatLoadingByEquipment[item.id] ? (
+                        <div style={{ fontSize: '0.82rem', color: '#777' }}>Loading chat...</div>
+                      ) : (chatByEquipment[item.id] || []).length > 0 ? (
+                        (chatByEquipment[item.id] || []).map(msg => (
+                          <div key={msg.id} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#333' }}>
+                              <strong>{msg.sender_name}</strong> · {maskPhone(msg.sender_phone)}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', color: '#555' }}>{msg.message}</div>
+                            <div style={{ fontSize: '0.74rem', color: '#999' }}>{new Date(msg.created_at).toLocaleString()}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: '0.82rem', color: '#777' }}>No chat yet. Start the conversation.</div>
+                      )}
+                    </div>
+
+                    <input
+                      placeholder="Your name"
+                      value={ensureChatDraft(item.id).sender_name}
+                      onChange={e => setChatDraftByEquipment(prev => ({
+                        ...prev,
+                        [item.id]: { ...ensureChatDraft(item.id), sender_name: e.target.value },
+                      }))}
+                      style={{ marginBottom: 6 }}
+                    />
+                    <input
+                      placeholder="Your phone"
+                      value={ensureChatDraft(item.id).sender_phone}
+                      onChange={e => setChatDraftByEquipment(prev => ({
+                        ...prev,
+                        [item.id]: { ...ensureChatDraft(item.id), sender_phone: e.target.value },
+                      }))}
+                      style={{ marginBottom: 6 }}
+                    />
+                    <textarea
+                      rows={2}
+                      placeholder="Type your message"
+                      value={ensureChatDraft(item.id).message}
+                      onChange={e => setChatDraftByEquipment(prev => ({
+                        ...prev,
+                        [item.id]: { ...ensureChatDraft(item.id), message: e.target.value },
+                      }))}
+                      style={{ marginBottom: 6 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => submitEquipmentChatMessage(item.id)}
+                      disabled={chatSendingByEquipment[item.id]}
+                      style={{ background: '#1769aa', fontSize: '0.84rem' }}
+                      className={chatSendingByEquipment[item.id] ? 'loading' : ''}
+                    >
+                      {chatSendingByEquipment[item.id] ? <><span className="spinner"></span>(loading)</> : <>Send chat</>}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {canUploadPhoto ? (
                 <>
                   <label style={{ marginTop: 8, fontSize: '0.85rem' }}>📷 {t('uploadPhoto')}:
