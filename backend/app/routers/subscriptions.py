@@ -50,6 +50,12 @@ class VerifySubscriptionResponse(BaseModel):
     detail: str
 
 
+class TestVerifySubscriptionResponse(BaseModel):
+    reference: str
+    status: str
+    detail: str
+
+
 class OwnerActivityItem(BaseModel):
     type: str  # subscription or payment
     reference: str
@@ -75,6 +81,15 @@ def _resolve_paystack_callback_url() -> str:
     if callback_url:
         return callback_url
     return "https://agroshare-frontend.onrender.com"
+
+
+def _test_subscription_bypass_enabled() -> bool:
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment != "production":
+        return True
+
+    flag = os.getenv("ALLOW_TEST_SUBSCRIPTION_VERIFICATION", "false").lower()
+    return flag in {"1", "true", "yes", "on"}
 
 
 async def initialize_subscription_checkout(
@@ -200,6 +215,21 @@ async def verify_subscription_by_reference(reference: str, db: Session = Depends
     db.commit()
     db.refresh(subscription)
     return VerifySubscriptionResponse(reference=subscription.reference, status=subscription.status, detail="Subscription payment verified")
+
+
+@router.post("/test/verify/{reference}", response_model=TestVerifySubscriptionResponse)
+def test_verify_subscription_by_reference(reference: str, db: Session = Depends(get_db)):
+    if not _test_subscription_bypass_enabled():
+        raise HTTPException(status_code=403, detail="Test subscription verification is disabled")
+
+    subscription = db.query(SubscriptionModel).filter(SubscriptionModel.reference == reference).first()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription reference not found")
+
+    subscription.status = "paid"
+    db.commit()
+    db.refresh(subscription)
+    return TestVerifySubscriptionResponse(reference=subscription.reference, status=subscription.status, detail="Test subscription payment verified")
 
 
 @router.get("/", response_model=List[Subscription])

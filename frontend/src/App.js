@@ -313,6 +313,10 @@ function App() {
   const [chatOpenByEquipment, setChatOpenByEquipment] = useState({});
   const [chatLoadingByEquipment, setChatLoadingByEquipment] = useState({});
   const [chatSendingByEquipment, setChatSendingByEquipment] = useState({});
+  const [isTestMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('testMode') === '1' || localStorage.getItem('agroshareTestMode') === 'true';
+  });
   
   // Phase 4: Ratings filter state
   const [minRatingFilter, setMinRatingFilter] = useState(0);
@@ -350,6 +354,12 @@ function App() {
     const numericFarmerId = Number(farmerId);
     if (!Number.isInteger(numericFarmerId) || numericFarmerId <= 0) return null;
     return subscriptions.find(subscription => subscription.farmer_id === numericFarmerId && String(subscription.status).toLowerCase() === 'paid') || null;
+  };
+
+  const getLatestSubscription = farmerId => {
+    const numericFarmerId = Number(farmerId);
+    if (!Number.isInteger(numericFarmerId) || numericFarmerId <= 0) return null;
+    return subscriptions.find(subscription => subscription.farmer_id === numericFarmerId) || null;
   };
 
   const getFarmerById = farmerId => farmers.find(farmer => farmer.id === Number(farmerId)) || null;
@@ -909,6 +919,36 @@ function App() {
       showNotice('error', '❌ Network error. Please try again.');
     } finally {
       setIsLoadingSupport(false);
+    }
+  };
+
+  const testYearlyVerification = async () => {
+    if (!isTestMode) {
+      showNotice('error', 'Enable test mode with ?testMode=1 or localStorage before using the test verifier.');
+      return;
+    }
+
+    const latestSubscription = getLatestSubscription(Number(subscriptionForm.farmer_id));
+    if (!latestSubscription || String(latestSubscription.plan).toLowerCase() !== 'yearly') {
+      showNotice('error', 'Create a yearly subscription first before using the test verifier.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/subscriptions/test/verify/${encodeURIComponent(latestSubscription.reference)}`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Unable to test-verify the subscription.'}`);
+        return;
+      }
+
+      refreshOwnerActivity();
+      showNotice('success', `✅ ${data.detail}. You can now open priority support.`);
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
     }
   };
 
@@ -1800,7 +1840,16 @@ function App() {
                   </div>
                 </>
               ) : (
-                <div style={{ color: '#777', marginTop: 10 }}>Upgrade to yearly to unlock priority support and the support inbox.</div>
+                <div style={{ color: '#777', marginTop: 10 }}>
+                  Upgrade to yearly to unlock priority support and the support inbox.
+                  {isTestMode && (
+                    <div style={{ marginTop: 10 }}>
+                      <button type="button" onClick={testYearlyVerification} style={{ width: 'auto', background: '#1769aa' }}>
+                        Test yearly verification
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
