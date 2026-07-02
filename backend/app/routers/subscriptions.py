@@ -13,6 +13,8 @@ from app.database import (
 
 router = APIRouter()
 
+LISTING_FEE_GHS = 200.0
+
 
 class SubscriptionCreate(BaseModel):
     farmer_id: int
@@ -54,7 +56,7 @@ def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_d
     if normalized_plan not in {"monthly", "yearly"}:
         raise HTTPException(status_code=400, detail="Plan must be monthly or yearly")
 
-    amount = 80.0 if normalized_plan == "monthly" else 800.0  # yearly = 10 months × 80 (2 months free)
+    amount = LISTING_FEE_GHS if normalized_plan == "monthly" else LISTING_FEE_GHS * 10  # yearly = 10 months × listing fee (2 months free)
 
     last_sub = db.query(SubscriptionModel).order_by(SubscriptionModel.id.desc()).first()
     next_id = (last_sub.id + 1) if last_sub else 1

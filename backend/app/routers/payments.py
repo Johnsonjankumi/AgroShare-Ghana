@@ -2,14 +2,12 @@ import hashlib
 import hmac
 import os
 import uuid
-import base64
 import json
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 from typing import List
 import httpx
 
-# Force redeployment - sandbox SMS config
 from sqlalchemy.orm import Session
 from app.database import get_db, Payment as PaymentModel, Booking as BookingModel, Equipment as EquipmentModel, Farmer as FarmerModel
 
@@ -44,22 +42,6 @@ class RetryPaymentResponse(BaseModel):
     transfer_error: str | None = None
 
 
-class SellerNotificationRequest(BaseModel):
-    seller_phone: str | None = None
-    seller_email: str | None = None
-    seller_amount: float | None = None
-    message: str | None = None
-
-
-class SellerNotificationResponse(BaseModel):
-    reference: str
-    seller_phone: str
-    seller_amount: float
-    message: str
-    sent: bool
-    detail: str
-
-
 def _get_paystack_secret() -> str | None:
     return os.getenv("PAYSTACK_SECRET_KEY")
 
@@ -76,175 +58,6 @@ def _legacy_payout_fallback_enabled() -> bool:
 def _auto_payout_enabled() -> bool:
     # Manual payout is now the default operational mode.
     return os.getenv("AUTO_PAYOUT_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _sms_provider() -> str:
-    return os.getenv("SMS_PROVIDER", "").strip().lower()
-
-
-def _normalize_phone_for_ghana(phone: str) -> str:
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    if digits.startswith("233"):
-        return digits
-    if digits.startswith("0") and len(digits) >= 10:
-        return "233" + digits[1:]
-    return digits
-
-
-async def _send_sms_with_hubtel(phone: str, message: str) -> tuple[bool, str]:
-    client_id = os.getenv("HUBTEL_CLIENT_ID", "").strip()
-    client_secret = os.getenv("HUBTEL_CLIENT_SECRET", "").strip()
-    sender = os.getenv("HUBTEL_SENDER_ID", "AgroShare")
-    if not client_id or not client_secret:
-        return False, "HUBTEL_CLIENT_ID or HUBTEL_CLIENT_SECRET is not configured"
-
-    recipient = _normalize_phone_for_ghana(phone)
-    if recipient.startswith("233"):
-        recipient = "+" + recipient
-
-    credentials = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("utf-8")
-    payload = {
-        "From": sender,
-        "To": recipient,
-        "Content": message,
-        "RegisteredDelivery": True,
-    }
-    headers = {
-        "Authorization": f"Basic {credentials}",
-        "Content-Type": "application/json",
-    }
-
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post("https://sms-api.hubtel.com/v1/messages/send", json=payload, headers=headers)
-
-    try:
-        body = response.json()
-    except ValueError:
-        body = {}
-
-    if response.status_code >= 400:
-        error_message = body.get("Message") or response.text.strip() or f"Hubtel SMS request failed with HTTP {response.status_code}"
-        return False, error_message
-
-    if str(body.get("Status", "")).strip() == "0":
-        return True, body.get("Message") or "SMS sent"
-
-    error_message = body.get("Message") or "SMS provider did not confirm delivery"
-    return False, error_message
-
-
-async def _send_sms_with_africastalking(phone: str, message: str) -> tuple[bool, str]:
-    api_key = os.getenv("AFRICASTALKING_API_KEY", "").strip()
-    username = os.getenv("AFRICASTALKING_USERNAME", "sandbox").strip()
-    sender_id = os.getenv("AFRICASTALKING_SENDER_ID", "").strip()
-    if not api_key:
-        return False, "AFRICASTALKING_API_KEY is not configured"
-
-    is_sandbox = username.lower() == "sandbox"
-    endpoint = (
-        "https://api.sandbox.africastalking.com/version1/messaging"
-        if is_sandbox
-        else "https://api.africastalking.com/version1/messaging"
-    )
-
-    recipient = _normalize_phone_for_ghana(phone)
-    if recipient.startswith("233"):
-        recipient = "+" + recipient
-
-    payload = {
-        "username": username,
-        "message": message,
-        "to": recipient,
-    }
-    if sender_id:
-        payload["from"] = sender_id
-
-    headers = {
-        "apiKey": api_key,
-        "Accept": "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post(endpoint, data=payload, headers=headers)
-
-    try:
-        body = response.json()
-    except ValueError:
-        body = {}
-
-    if response.status_code >= 400:
-        error_message = body.get("SMSMessageData", {}).get("Message") or response.text.strip() or f"Africa's Talking SMS request failed with HTTP {response.status_code}"
-        return False, error_message
-
-    recipients = body.get("SMSMessageData", {}).get("Recipients") or []
-    if recipients:
-        first = recipients[0]
-        status = str(first.get("status") or "").strip().lower()
-        code = int(first.get("statusCode", 0)) if str(first.get("statusCode", "")).isdigit() else 0
-        number = first.get("number") or recipient
-        message_id = first.get("messageId") or "n/a"
-        if status == "success" or code == 101:
-            provider_msg = body.get("SMSMessageData", {}).get("Message") or "SMS accepted by provider"
-            return True, f"{provider_msg}; recipient={number}; messageId={message_id}; status={first.get('status') or 'unknown'}"
-        return False, first.get("status") or first.get("statusDescription") or "SMS provider did not confirm recipient acceptance"
-
-    high_level_message = body.get("SMSMessageData", {}).get("Message") or "No recipient status returned"
-    return False, high_level_message
-
-
-async def send_seller_sms(phone: str, message: str) -> tuple[bool, str]:
-    provider = _sms_provider()
-    if provider in {"", "none", "disabled", "manual"}:
-        return False, "SMS provider is not configured"
-
-    if provider == "hubtel":
-        return await _send_sms_with_hubtel(phone, message)
-
-    if provider in {"africastalking", "africas_talking", "at"}:
-        return await _send_sms_with_africastalking(phone, message)
-
-    return False, f"Unsupported SMS provider: {provider}"
-
-
-async def send_seller_email(email: str, subject: str, html_body: str) -> tuple[bool, str]:
-    """Send email via Brevo (formerly Sendinblue). Returns (success, detail_message)"""
-    api_key = os.getenv("BREVO_API_KEY", "").strip()
-    if not api_key:
-        return False, "BREVO_API_KEY is not configured. Email notifications disabled."
-    
-    sender_email = os.getenv("BREVO_SENDER_EMAIL", "noreply@agrosharaga.com").strip()
-    sender_name = os.getenv("BREVO_SENDER_NAME", "AgroShare Ghana").strip()
-    
-    payload = {
-        "sender": {
-            "name": sender_name,
-            "email": sender_email,
-        },
-        "to": [{"email": email}],
-        "subject": subject,
-        "htmlContent": html_body,
-    }
-    
-    headers = {
-        "api-key": api_key,
-        "Content-Type": "application/json",
-    }
-    
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post("https://api.brevo.com/v3/smtp/email", json=payload, headers=headers)
-    
-    try:
-        body = response.json()
-    except ValueError:
-        body = {}
-    
-    if response.status_code >= 400:
-        error_msg = body.get("message") or body.get("error") or response.text.strip() or f"Brevo request failed with HTTP {response.status_code}"
-        return False, error_msg
-    
-    message_id = body.get("messageId") or "unknown"
-    return True, f"Email sent successfully (ID: {message_id})"
 
 
 def _build_checkout_email(mobile_number: str) -> str:
@@ -494,89 +307,6 @@ async def retry_payment_by_reference(reference: str, db: Session = Depends(get_d
     detail = "Payout transfer sent successfully" if final_status == "released" else (transfer_error or "Payment verified; seller payout pending manual transfer")
     return RetryPaymentResponse(reference=payment.reference, status=final_status, detail=detail, transfer_error=transfer_error)
 
-
-@router.post("/{reference}/notify-seller", response_model=SellerNotificationResponse)
-async def notify_seller_after_manual_transfer(reference: str, payload: SellerNotificationRequest, db: Session = Depends(get_db)):
-    payment = db.query(PaymentModel).filter(PaymentModel.reference == reference).first()
-    
-    # Allow SMS testing without payment existing (for sandbox/testing)
-    allow_sms_test = os.getenv("ALLOW_SMS_TEST_WITHOUT_PAYMENT", "false").lower() in {"1", "true", "yes", "on"}
-    
-    if not payment and not allow_sms_test:
-        raise HTTPException(status_code=404, detail="Payment reference not found")
-
-    booking = None
-    equipment = None
-    
-    # Only fetch booking/equipment if payment exists
-    if payment:
-        booking = db.query(BookingModel).filter(BookingModel.id == payment.booking_id).first()
-        if not booking:
-            raise HTTPException(status_code=404, detail="Booking not found for payment")
-
-        equipment = db.query(EquipmentModel).filter(EquipmentModel.id == booking.equipment_id).first()
-        if not equipment:
-            raise HTTPException(status_code=404, detail="Equipment not found for booking")
-
-    seller_phone = (payload.seller_phone or "").strip()
-    if not seller_phone and equipment and equipment.owner_farmer_id:
-        owner_farmer = db.query(FarmerModel).filter(FarmerModel.id == equipment.owner_farmer_id).first()
-        if owner_farmer and owner_farmer.phone:
-            seller_phone = owner_farmer.phone.strip()
-
-    if not seller_phone:
-        raise HTTPException(status_code=400, detail="Seller phone not found. Provide seller_phone in request body.")
-
-    seller_amount = round(float(payload.seller_amount if payload.seller_amount is not None else (equipment.price_per_day if equipment else 0)), 2)
-    default_message = f"You have received a payment of GHS {seller_amount:.2f} from agrosharaga.com."
-    message = (payload.message or default_message).strip()
-
-    # Try to get seller email
-    seller_email = (payload.seller_email or "").strip()
-    if not seller_email and equipment and equipment.owner_farmer_id:
-        owner_farmer = db.query(FarmerModel).filter(FarmerModel.id == equipment.owner_farmer_id).first()
-        if owner_farmer and owner_farmer.email:
-            seller_email = owner_farmer.email.strip()
-
-    # Send SMS
-    sms_sent, sms_detail = await send_seller_sms(seller_phone, message)
-    
-    # Try to send email as complement/fallback
-    email_sent = False
-    email_detail = "Email provider not configured"
-    if seller_email:
-        email_html = f"""
-        <html>
-            <body style="font-family: Arial, sans-serif; padding: 20px;">
-                <h2>Payment Notification</h2>
-                <p>You have received a payment of <strong>GHS {seller_amount:.2f}</strong> from AgroShare Ghana (agrosharaga.com).</p>
-                <p>Thank you for using our platform to share equipment with farmers in your community.</p>
-                <p>Best regards,<br>AgroShare Ghana Team</p>
-            </body>
-        </html>
-        """
-        email_sent, email_detail = await send_seller_email(seller_email, "Payment Received - AgroShare Ghana", email_html)
-    
-    # Determine overall detail message
-    if sms_sent and email_sent:
-        detail = f"Payment notification sent via SMS and email successfully."
-    elif sms_sent:
-        detail = f"SMS sent successfully. {sms_detail}"
-        if not os.getenv("BREVO_API_KEY"):
-            detail += " (Email not configured)"
-    elif email_sent:
-        detail = f"Email sent successfully. SMS failed: {sms_detail}"
-    else:
-        detail = f"SMS failed: {sms_detail}" + (f" Email failed: {email_detail}" if seller_email else " (No email configured)")
-
-    return SellerNotificationResponse(
-        reference=reference if not payment else payment.reference,
-        seller_phone=seller_phone,
-        seller_amount=seller_amount,
-        message=message,
-        sent=sms_sent or email_sent,
-        detail=detail,
-    )
 
 class PaymentWebhook(BaseModel):
     event: str

@@ -290,7 +290,6 @@ function App() {
   const [isLoadingPhotoUpload, setIsLoadingPhotoUpload] = useState(false);
   const [isLoadingRelease, setIsLoadingRelease] = useState(false);
   const [isLoadingRetry, setIsLoadingRetry] = useState(false);
-  const [isLoadingSendSms, setIsLoadingSendSms] = useState(false);
   
   // Error states for forms
   const [farmerErrors, setFarmerErrors] = useState({});
@@ -333,6 +332,12 @@ function App() {
     if (status === 'paid') return 'Paid (seller payout is manual)';
     if (status === 'released') return 'Released (auto payout)';
     return status;
+  };
+
+  const hasPaidListingAccess = farmerId => {
+    const numericFarmerId = Number(farmerId);
+    if (!Number.isInteger(numericFarmerId) || numericFarmerId <= 0) return false;
+    return subscriptions.some(subscription => subscription.farmer_id === numericFarmerId && String(subscription.status).toLowerCase() === 'paid');
   };
 
   // Auto-dismiss notification after 5 seconds
@@ -492,6 +497,18 @@ function App() {
 
   const submitEquipment = async e => {
     e.preventDefault();
+    if (!equipmentForm.owner_farmer_id) {
+      setEquipmentErrors({ owner_farmer_id: 'Enter your Farmer ID after subscribing to unlock listings.' });
+      showNotice('error', '❌ Pay the listing fee first, then enter your Farmer ID to unlock this form.');
+      return;
+    }
+
+    if (!hasPaidListingAccess(equipmentForm.owner_farmer_id)) {
+      setEquipmentErrors({ owner_farmer_id: 'No paid subscription found for this Farmer ID.' });
+      showNotice('error', '❌ You need a paid subscription before listing equipment or uploading photos.');
+      return;
+    }
+
     setIsLoadingEquipment(true);
     setEquipmentErrors({});
     try {
@@ -631,8 +648,9 @@ function App() {
       }
 
       setSubscriptions(s => [data, ...s]);
+      setEquipmentForm(f => ({ ...f, owner_farmer_id: String(data.farmer_id) }));
       refreshOwnerActivity();
-      showNotice('success', `✅ ${plan} subscription paid. Reference: ${data.reference}`);
+      showNotice('success', `✅ ${plan} listing fee paid. Reference: ${data.reference}`);
     } catch (err) {
       showNotice('error', '❌ Network error. Please try again.');
     } finally {
@@ -687,44 +705,6 @@ function App() {
     }
   };
 
-  const sendSellerSmsForPayment = async payment => {
-    const amountInput = window.prompt('Enter amount you sent to seller (GHS):', '');
-    if (amountInput === null) return;
-    const sellerAmount = Number(amountInput);
-    if (!Number.isFinite(sellerAmount) || sellerAmount <= 0) {
-      showNotice('error', 'Enter a valid seller amount greater than 0.');
-      return;
-    }
-
-    const sellerPhoneInput = window.prompt('Enter seller phone (optional). Leave blank to auto-detect from booking owner:', '');
-    if (sellerPhoneInput === null) return;
-
-    const payload = { seller_amount: sellerAmount };
-    if (sellerPhoneInput.trim()) {
-      payload.seller_phone = sellerPhoneInput.trim();
-    }
-
-    setIsLoadingSendSms(true);
-    try {
-      const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(payment.reference)}/notify-seller`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showNotice('error', `❌ ${data.detail || 'Unable to send seller SMS.'}`);
-        return;
-      }
-
-      showNotice(data.sent ? 'success' : 'error', `${data.detail} Message: ${data.message}`);
-    } catch (err) {
-      showNotice('error', '❌ Network error. Please try again.');
-    } finally {
-      setIsLoadingSendSms(false);
-    }
-  };
-
   const sendUssd = async e => {
     e.preventDefault();
     setIsLoadingUssd(true);
@@ -773,6 +753,8 @@ function App() {
       setIsLoadingPhotoUpload(false);
     }
   };
+
+  const equipmentListingUnlocked = hasPaidListingAccess(equipmentForm.owner_farmer_id);
 
   const submitRating = async e => {
     e.preventDefault();
@@ -1023,7 +1005,7 @@ function App() {
         <div className="grid-2" style={{ maxWidth: 560, margin: '0 auto' }}>
           <div className="pricing-card">
             <div style={{ fontWeight: 700 }}>{t('monthly')}</div>
-            <div className="price">GHS 80</div>
+            <div className="price">GHS 200 / USD 20</div>
             <div className="period">/ per month — cancel anytime</div>
             <ul style={{ textAlign: 'left', paddingLeft: 18, color: '#333', fontSize: '0.88rem', marginBottom: 16 }}>
               <li>✅ List unlimited equipment</li>
@@ -1041,8 +1023,8 @@ function App() {
             <div style={{ fontWeight: 700 }}>
               {t('yearly')} <span style={{ background: '#1769aa', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.75rem' }}>{t('save')}</span>
             </div>
-            <div className="price">GHS 800</div>
-            <div className="period">/ GHS 80/mo × 10 months (2 months free)</div>
+            <div className="price">GHS 2,000 / USD 200</div>
+            <div className="period">/ GHS 200/mo × 10 months (2 months free)</div>
             <ul style={{ textAlign: 'left', paddingLeft: 18, color: '#333', fontSize: '0.88rem', marginBottom: 16 }}>
               <li>✅ Everything in Monthly</li>
               <li>⭐ Top of search results (get seen first)</li>
@@ -1145,12 +1127,19 @@ function App() {
 
         <div style={card}>
           <h2>🚜 {t('listEquipment')}</h2>
+          <div style={{ marginBottom: 12, padding: 12, borderRadius: 10, border: '1px solid #d7c27a', background: equipmentListingUnlocked ? '#edf7ed' : '#fff7e6', color: '#3d3d3d', fontSize: '0.92rem' }}>
+            {equipmentListingUnlocked
+              ? `Paid access active for Farmer ID ${equipmentForm.owner_farmer_id}. You can list equipment and upload photos.`
+              : 'Pay the listing fee first in the subscription section, then enter the same Farmer ID here to unlock this form and photo uploads.'}
+          </div>
           <form onSubmit={submitEquipment}>
             <label>{t('ownerName')}<span className="required-indicator">*</span><br /><input value={equipmentForm.owner_name} onChange={e => setEquipmentForm(f => ({ ...f, owner_name: e.target.value }))} required className={equipmentErrors.owner_name ? 'error' : ''} /></label>
             {equipmentErrors.owner_name && <span className="error-message">{equipmentErrors.owner_name}</span>}
             
             <label>Owner Farmer ID (for payout routing)<br /><input type="number" value={equipmentForm.owner_farmer_id} onChange={e => setEquipmentForm(f => ({ ...f, owner_farmer_id: e.target.value }))} placeholder="e.g. 1" className={equipmentErrors.owner_farmer_id ? 'error' : ''} /></label>
             {equipmentErrors.owner_farmer_id && <span className="error-message">{equipmentErrors.owner_farmer_id}</span>}
+
+            <fieldset disabled={!equipmentListingUnlocked || isLoadingEquipment} style={{ border: 'none', padding: 0, margin: 0 }}>
             
             <label>{t('equipmentType')}<span className="required-indicator">*</span><br /><input value={equipmentForm.type} onChange={e => setEquipmentForm(f => ({ ...f, type: e.target.value }))} required className={equipmentErrors.type ? 'error' : ''} /></label>
             {equipmentErrors.type && <span className="error-message">{equipmentErrors.type}</span>}
@@ -1187,6 +1176,7 @@ function App() {
                 t('addListing')
               )}
             </button>
+            </fieldset>
           </form>
         </div>
       </div>
@@ -1269,7 +1259,9 @@ function App() {
       <div className="grid-2" style={{ marginBottom: 14 }}>
         <div style={card}>
           <h2>📋 {t('availableEquipment')}</h2>
-          {filteredEquipment.length > 0 ? filteredEquipment.map(item => (
+          {filteredEquipment.length > 0 ? filteredEquipment.map(item => {
+            const canUploadPhoto = hasPaidListingAccess(item.owner_farmer_id);
+            return (
             <div key={item.id} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #eee', position: 'relative' }}>
               {/* Favorite button */}
               <button
@@ -1305,14 +1297,22 @@ function App() {
               <div style={{ color: '#555', fontSize: '0.88rem' }}>📍 {item.district} · 👤 {item.owner_name}</div>
               <div style={{ fontWeight: 700, color: '#1769aa' }}>GHS {Number(item.price_per_day ?? 0).toFixed(2)} / day</div>
               {item.description && <div style={{ fontSize: '0.85rem', color: '#666' }}>{item.description}</div>}
-              <label style={{ marginTop: 8, fontSize: '0.85rem' }}>📷 {t('uploadPhoto')}:
-                <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} style={{ marginTop: 4 }} disabled={isLoadingPhotoUpload} />
-              </label>
-              {photoFile && <button type="button" onClick={() => uploadEquipmentPhoto(item.id)} disabled={isLoadingPhotoUpload} style={{ background: '#555', marginTop: 4 }} className={isLoadingPhotoUpload ? 'loading' : ''}>
-                {isLoadingPhotoUpload ? <><span className="spinner"></span>({t('loading')})</> : <>{t('uploadPhoto')}</> }
-              </button>}
+              {canUploadPhoto ? (
+                <>
+                  <label style={{ marginTop: 8, fontSize: '0.85rem' }}>📷 {t('uploadPhoto')}:
+                    <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} style={{ marginTop: 4 }} disabled={isLoadingPhotoUpload} />
+                  </label>
+                  {photoFile && <button type="button" onClick={() => uploadEquipmentPhoto(item.id)} disabled={isLoadingPhotoUpload} style={{ background: '#555', marginTop: 4 }} className={isLoadingPhotoUpload ? 'loading' : ''}>
+                    {isLoadingPhotoUpload ? <><span className="spinner"></span>({t('loading')})</> : <>{t('uploadPhoto')}</> }
+                  </button>}
+                </>
+              ) : (
+                <div style={{ marginTop: 8, fontSize: '0.85rem', color: '#8a5b00', background: '#fff7e6', padding: 8, borderRadius: 6 }}>
+                  Photo upload locked until the seller pays the listing fee.
+                </div>
+              )}
             </div>
-          )) : <p style={{ color: '#888' }}>{filteredEquipment.length === 0 && equipment.length > 0 ? '❌ No equipment matches your filters. Try adjusting your search.' : t('noEquipment')}</p>}
+          );}) : <p style={{ color: '#888' }}>{filteredEquipment.length === 0 && equipment.length > 0 ? '❌ No equipment matches your filters. Try adjusting your search.' : t('noEquipment')}</p>}
         </div>
 
         <div style={card}>
@@ -1466,11 +1466,6 @@ function App() {
                 {payment.status !== 'released' && (
                   <button type="button" onClick={() => releasePayment(payment.id)} disabled={isLoadingRelease} style={{ marginTop: 6, background: '#2e7d32' }} className={isLoadingRelease ? 'loading' : ''}>
                     {isLoadingRelease ? <><span className="spinner"></span>({t('loading')})</> : <>✅ {t('complete')}</> }
-                  </button>
-                )}
-                {payment.status === 'paid' && (
-                  <button type="button" onClick={() => sendSellerSmsForPayment(payment)} disabled={isLoadingSendSms} style={{ marginTop: 6, background: '#1769aa' }} className={isLoadingSendSms ? 'loading' : ''}>
-                    {isLoadingSendSms ? <><span className="spinner"></span>({t('loading')})</> : <>📩 Send seller SMS</> }
                   </button>
                 )}
               </div>

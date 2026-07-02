@@ -244,6 +244,12 @@ section:hover {
   color: #b71c1c;
 }
 
+.toast.warning {
+  background: var(--warning-light);
+  border-left-color: var(--warning);
+  color: #9a5a00;
+}
+
 @keyframes slideDown {
   from { top: -80px; opacity: 0; }
   to   { top: 16px;  opacity: 1; }

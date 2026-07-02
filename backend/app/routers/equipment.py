@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from app.database import get_db, Equipment as EquipmentModel
+from app.database import get_db, Equipment as EquipmentModel, Farmer as FarmerModel, Subscription as SubscriptionModel
 import os
 import shutil
 from datetime import datetime
@@ -33,8 +33,29 @@ class Equipment(BaseModel):
     class Config:
         from_attributes = True
 
+
+def _has_paid_listing_access(db: Session, farmer_id: int) -> bool:
+    farmer = db.query(FarmerModel).filter(FarmerModel.id == farmer_id).first()
+    if not farmer:
+        return False
+
+    subscription = (
+        db.query(SubscriptionModel)
+        .filter(SubscriptionModel.farmer_id == farmer_id)
+        .filter(SubscriptionModel.status == "paid")
+        .order_by(SubscriptionModel.created_at.desc())
+        .first()
+    )
+    return subscription is not None
+
 @router.post("/", response_model=Equipment)
 def create_equipment(item: EquipmentCreate, db: Session = Depends(get_db)):
+    if not item.owner_farmer_id:
+        raise HTTPException(status_code=400, detail="Owner Farmer ID is required to list equipment")
+
+    if not _has_paid_listing_access(db, item.owner_farmer_id):
+        raise HTTPException(status_code=402, detail="Payment required before listing equipment. Subscribe first to unlock this form.")
+
     new_item = EquipmentModel(**item.dict())
     db.add(new_item)
     db.commit()
@@ -46,6 +67,12 @@ async def upload_equipment_photo(equipment_id: int, file: UploadFile = File(...)
     equipment = db.query(EquipmentModel).filter(EquipmentModel.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
+
+    if not equipment.owner_farmer_id:
+        raise HTTPException(status_code=400, detail="Owner Farmer ID is required before uploading a photo")
+
+    if not _has_paid_listing_access(db, equipment.owner_farmer_id):
+        raise HTTPException(status_code=402, detail="Payment required before uploading equipment photos")
     
     # Save file to uploads directory
     upload_dir = "uploads"

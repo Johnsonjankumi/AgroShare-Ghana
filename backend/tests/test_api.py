@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database import Base, engine, SessionLocal
 from app.database import Farmer as FarmerModel
+from app.routers.payments import _build_seller_notification_detail
 
 # Create test database tables
 Base.metadata.create_all(bind=engine)
@@ -186,3 +187,16 @@ def test_equipment_filter_by_district():
     data = response.json()
     assert len(data) == 1
     assert data[0]["district"] == "Ashanti"
+
+
+def test_seller_notification_detail_omits_no_email_suffix_when_sms_fails():
+    detail = _build_seller_notification_detail(
+        sms_sent=False,
+        sms_detail="The supplied authentication is invalid",
+        email_sent=False,
+        email_detail="Email provider not configured",
+        seller_email="",
+    )
+
+    assert detail == "SMS failed: The supplied authentication is invalid"
+    assert "No email configured" not in detail
