@@ -1102,6 +1102,7 @@ function App() {
   };
 
   const card = { padding: 18, border: '1px solid #ddd', borderRadius: 12, background: 'rgba(255,255,255,0.97)' };
+  // Keep this section aligned with the current deployed premium access flow.
   const selectedPremiumFarmerId = Number(subscriptionForm.farmer_id);
   const selectedPremiumSubscription = getActiveSubscription(selectedPremiumFarmerId);
   const selectedPremiumFarmer = getFarmerById(selectedPremiumFarmerId);
