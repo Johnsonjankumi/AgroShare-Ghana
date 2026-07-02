@@ -1,8 +1,11 @@
 from datetime import datetime
+import os
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List
+import httpx
 
 from app.database import (
     get_db,
@@ -37,6 +40,16 @@ class Subscription(BaseModel):
         from_attributes = True
 
 
+class SubscriptionCreateResponse(Subscription):
+    checkout_url: str | None = None
+
+
+class VerifySubscriptionResponse(BaseModel):
+    reference: str
+    status: str
+    detail: str
+
+
 class OwnerActivityItem(BaseModel):
     type: str  # subscription or payment
     reference: str
@@ -46,8 +59,93 @@ class OwnerActivityItem(BaseModel):
     meta: dict
 
 
-@router.post("/", response_model=Subscription)
-def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_db)):
+def _get_paystack_secret() -> str | None:
+    return os.getenv("PAYSTACK_SECRET_KEY")
+
+
+def _build_checkout_email(mobile_number: str) -> str:
+    digits = "".join(ch for ch in mobile_number if ch.isdigit())
+    if not digits:
+        digits = "customer"
+    return f"{digits}@agroshare.gh"
+
+
+def _resolve_paystack_callback_url() -> str:
+    callback_url = os.getenv("PAYSTACK_CALLBACK_URL")
+    if callback_url:
+        return callback_url
+    return "https://agroshare-frontend.onrender.com"
+
+
+async def initialize_subscription_checkout(
+    *,
+    amount: float,
+    reference: str,
+    mobile_number: str,
+    farmer_id: int,
+    plan: str,
+) -> str:
+    secret = _get_paystack_secret()
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+
+    if not secret:
+        if environment == "production":
+            raise HTTPException(status_code=503, detail="PAYSTACK_SECRET_KEY is not configured")
+        raise HTTPException(status_code=400, detail="PAYSTACK_SECRET_KEY is missing")
+
+    payload = {
+        "email": _build_checkout_email(mobile_number),
+        "amount": int(round(amount * 100)),
+        "currency": "GHS",
+        "reference": reference,
+        "callback_url": _resolve_paystack_callback_url(),
+        "metadata": {
+            "farmer_id": farmer_id,
+            "mobile_number": mobile_number,
+            "plan": plan,
+            "type": "subscription",
+            "source": "agroshare-subscriptions",
+        },
+    }
+
+    headers = {
+        "Authorization": f"Bearer {secret}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post("https://api.paystack.co/transaction/initialize", json=payload, headers=headers)
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Failed to initialize Paystack transaction")
+
+    body = response.json()
+    if not body.get("status") or not body.get("data", {}).get("authorization_url"):
+        raise HTTPException(status_code=502, detail="Invalid Paystack initialize response")
+
+    return body["data"]["authorization_url"]
+
+
+async def verify_paystack_transaction(reference: str) -> str | None:
+    secret = _get_paystack_secret()
+    if not secret:
+        return None
+
+    headers = {"Authorization": f"Bearer {secret}"}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(f"https://api.paystack.co/transaction/verify/{reference}", headers=headers)
+
+    if response.status_code >= 400:
+        return None
+
+    body = response.json()
+    if not body.get("status"):
+        return None
+    return str(body.get("data", {}).get("status") or "").lower()
+
+
+@router.post("/", response_model=SubscriptionCreateResponse)
+async def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_db)):
     farmer = db.query(FarmerModel).filter(FarmerModel.id == payload.farmer_id).first()
     if not farmer:
         raise HTTPException(status_code=404, detail="Farmer not found")
@@ -58,9 +156,15 @@ def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_d
 
     amount = LISTING_FEE_GHS if normalized_plan == "monthly" else LISTING_FEE_GHS * 10  # yearly = 10 months × listing fee (2 months free)
 
-    last_sub = db.query(SubscriptionModel).order_by(SubscriptionModel.id.desc()).first()
-    next_id = (last_sub.id + 1) if last_sub else 1
-    reference = f"SUB-{next_id}-{payload.farmer_id}"
+    reference = f"SUB-{payload.farmer_id}-{uuid.uuid4().hex[:10].upper()}"
+
+    checkout_url = await initialize_subscription_checkout(
+        amount=amount,
+        reference=reference,
+        mobile_number=payload.mobile_number,
+        farmer_id=payload.farmer_id,
+        plan=normalized_plan,
+    )
 
     record = SubscriptionModel(
         farmer_id=payload.farmer_id,
@@ -69,13 +173,33 @@ def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_d
         currency="GHS",
         mobile_number=payload.mobile_number,
         reference=reference,
-        status="paid",  # MVP flow: mark paid after request creation
+        status="pending",
     )
 
     db.add(record)
     db.commit()
     db.refresh(record)
+    record.checkout_url = checkout_url
     return record
+
+
+@router.post("/verify/{reference}", response_model=VerifySubscriptionResponse)
+async def verify_subscription_by_reference(reference: str, db: Session = Depends(get_db)):
+    subscription = db.query(SubscriptionModel).filter(SubscriptionModel.reference == reference).first()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription reference not found")
+
+    if subscription.status == "paid":
+        return VerifySubscriptionResponse(reference=subscription.reference, status=subscription.status, detail="Subscription already verified")
+
+    tx_status = await verify_paystack_transaction(reference)
+    if tx_status != "success":
+        raise HTTPException(status_code=400, detail="Transaction is not yet successful on Paystack")
+
+    subscription.status = "paid"
+    db.commit()
+    db.refresh(subscription)
+    return VerifySubscriptionResponse(reference=subscription.reference, status=subscription.status, detail="Subscription payment verified")
 
 
 @router.get("/", response_model=List[Subscription])

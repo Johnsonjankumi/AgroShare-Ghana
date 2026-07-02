@@ -363,6 +363,34 @@ function App() {
     fetch(`${API_BASE}/subscriptions/owner/activity`).then(r => r.json()).then(setOwnerActivity).catch(() => {});
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const trxref = params.get('trxref') || params.get('reference');
+    if (!trxref || !trxref.startsWith('SUB-')) return;
+
+    const verifySubscription = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/subscriptions/verify/${encodeURIComponent(trxref)}`, { method: 'POST' });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showNotice('error', `❌ ${data.detail || 'Unable to verify subscription payment.'}`);
+          return;
+        }
+
+        refreshOwnerActivity();
+        showNotice('success', `✅ Subscription payment confirmed. Reference: ${data.reference}`);
+      } catch (err) {
+        showNotice('error', '❌ Unable to verify subscription payment right now.');
+      } finally {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    };
+
+    verifySubscription();
+  }, []);
+
   // Initialize Leaflet map
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -648,9 +676,20 @@ function App() {
       }
 
       setSubscriptions(s => [data, ...s]);
-      setEquipmentForm(f => ({ ...f, owner_farmer_id: String(data.farmer_id) }));
       refreshOwnerActivity();
-      showNotice('success', `✅ ${plan} listing fee paid. Reference: ${data.reference}`);
+
+      if (data.checkout_url) {
+        showNotice('success', 'Redirecting to Paystack checkout for subscription...');
+        window.location.assign(data.checkout_url);
+        return;
+      }
+
+      if (String(data.status).toLowerCase() === 'paid') {
+        setEquipmentForm(f => ({ ...f, owner_farmer_id: String(data.farmer_id) }));
+        showNotice('success', `✅ ${plan} listing fee paid. Reference: ${data.reference}`);
+      } else {
+        showNotice('success', `✅ Subscription created. Complete payment to unlock listing. Reference: ${data.reference}`);
+      }
     } catch (err) {
       showNotice('error', '❌ Network error. Please try again.');
     } finally {

@@ -9,7 +9,7 @@ from typing import List
 import httpx
 
 from sqlalchemy.orm import Session
-from app.database import get_db, Payment as PaymentModel, Booking as BookingModel, Equipment as EquipmentModel, Farmer as FarmerModel
+from app.database import get_db, Payment as PaymentModel, Booking as BookingModel, Equipment as EquipmentModel, Farmer as FarmerModel, Subscription as SubscriptionModel
 
 router = APIRouter()
 
@@ -355,13 +355,22 @@ async def paystack_webhook(
         raise HTTPException(status_code=400, detail="Missing webhook payload fields")
 
     payment = db.query(PaymentModel).filter(PaymentModel.reference == reference).first()
+    subscription = None
     if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
+        subscription = db.query(SubscriptionModel).filter(SubscriptionModel.reference == reference).first()
+        if not subscription:
+            return {"reference": reference, "status": "ignored", "detail": "Reference not found"}
 
     if status.lower() == "success":
-        await settle_payment_and_payout(payment, db)
+        if payment:
+            await settle_payment_and_payout(payment, db)
+        elif subscription and subscription.status != "paid":
+            subscription.status = "paid"
+            db.commit()
+            db.refresh(subscription)
 
-    return {"reference": reference, "status": payment.status}
+    final_status = payment.status if payment else subscription.status
+    return {"reference": reference, "status": final_status}
 
 @router.get("/", response_model=List[Payment])
 def list_payments(db: Session = Depends(get_db)):
