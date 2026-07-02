@@ -271,6 +271,8 @@ function App() {
   const [poolForm, setPoolForm] = useState({ farmer_id: '', equipment_id: '', rental_date: '', district: 'Greater Accra' });
   const [retryReference, setRetryReference] = useState('');
   const [subscriptionForm, setSubscriptionForm] = useState({ farmer_id: '', mobile_number: '' });
+  const [supportForm, setSupportForm] = useState({ farmer_name: '', phone: '', subject: '', message: '' });
+  const [supportTickets, setSupportTickets] = useState([]);
   const [ussdForm, setUssdForm] = useState({ session_id: localStorage.getItem('ussdSession') || '', phone_number: '', input_text: '' });
   const [notice, setNotice] = useState(null);
   const [ratings, setRatings] = useState([]);
@@ -288,6 +290,7 @@ function App() {
   const [isLoadingPhotoUpload, setIsLoadingPhotoUpload] = useState(false);
   const [isLoadingRelease, setIsLoadingRelease] = useState(false);
   const [isLoadingRetry, setIsLoadingRetry] = useState(false);
+  const [isLoadingSupport, setIsLoadingSupport] = useState(false);
   
   // Error states for forms
   const [farmerErrors, setFarmerErrors] = useState({});
@@ -349,6 +352,8 @@ function App() {
     return subscriptions.find(subscription => subscription.farmer_id === numericFarmerId && String(subscription.status).toLowerCase() === 'paid') || null;
   };
 
+  const getFarmerById = farmerId => farmers.find(farmer => farmer.id === Number(farmerId)) || null;
+
   const isVerifiedSeller = farmerId => Boolean(getActiveSubscription(farmerId));
 
   const getSellerRank = farmerId => {
@@ -364,6 +369,10 @@ function App() {
   };
 
   const getFarmerListings = farmerId => equipment.filter(item => Number(item.owner_farmer_id) === Number(farmerId));
+
+  const getFarmerListingCount = farmerId => getFarmerListings(farmerId).length;
+
+  const getGhanaRenterDirectory = () => [...farmers].sort((a, b) => a.district.localeCompare(b.district) || a.name.localeCompare(b.name));
 
   const getBusinessProfileFarmers = () => {
     const paidIds = [...new Set(subscriptions.filter(sub => String(sub.status).toLowerCase() === 'paid').map(sub => Number(sub.farmer_id)).filter(id => Number.isInteger(id) && id > 0))];
@@ -395,6 +404,21 @@ function App() {
     fetch(`${API_BASE}/subscriptions/`).then(r => r.json()).then(setSubscriptions).catch(() => {});
     fetch(`${API_BASE}/subscriptions/owner/activity`).then(r => r.json()).then(setOwnerActivity).catch(() => {});
   };
+
+  useEffect(() => {
+    const farmerId = Number(subscriptionForm.farmer_id);
+    const subscription = getActiveSubscription(farmerId);
+
+    if (!subscription || String(subscription.plan).toLowerCase() !== 'yearly') {
+      setSupportTickets([]);
+      return;
+    }
+
+    fetch(`${API_BASE}/support/farmer/${farmerId}`)
+      .then(r => r.json())
+      .then(data => setSupportTickets(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [subscriptionForm.farmer_id, subscriptions]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -840,6 +864,54 @@ function App() {
     }
   };
 
+  const submitPrioritySupportTicket = async () => {
+    const farmerId = Number(subscriptionForm.farmer_id);
+    const subscription = getActiveSubscription(farmerId);
+    if (!subscription || String(subscription.plan).toLowerCase() !== 'yearly') {
+      showNotice('error', 'Enter a paid yearly farmer number to unlock priority support.');
+      return;
+    }
+
+    const farmer = getFarmerById(farmerId);
+    const farmerName = (supportForm.farmer_name || farmer?.name || '').trim();
+    const phone = (supportForm.phone || farmer?.phone || '').trim();
+    const subject = supportForm.subject.trim();
+    const message = supportForm.message.trim();
+
+    if (!farmerName || !phone || !subject || !message) {
+      showNotice('error', 'Fill in your name, phone, subject, and message before sending support.');
+      return;
+    }
+
+    setIsLoadingSupport(true);
+    try {
+      const res = await fetch(`${API_BASE}/support/priority`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          farmer_id: farmerId,
+          farmer_name: farmerName,
+          phone,
+          subject,
+          message,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice('error', `❌ ${data.detail || 'Unable to open support request.'}`);
+        return;
+      }
+
+      setSupportTickets(tickets => [data, ...tickets].slice(0, 10));
+      setSupportForm(form => ({ ...form, subject: '', message: '' }));
+      showNotice('success', `✅ Priority support ticket opened. Ticket #${data.id}`);
+    } catch (err) {
+      showNotice('error', '❌ Network error. Please try again.');
+    } finally {
+      setIsLoadingSupport(false);
+    }
+  };
+
   const sendUssd = async e => {
     e.preventDefault();
     setIsLoadingUssd(true);
@@ -1030,6 +1102,12 @@ function App() {
   };
 
   const card = { padding: 18, border: '1px solid #ddd', borderRadius: 12, background: 'rgba(255,255,255,0.97)' };
+  const selectedPremiumFarmerId = Number(subscriptionForm.farmer_id);
+  const selectedPremiumSubscription = getActiveSubscription(selectedPremiumFarmerId);
+  const selectedPremiumFarmer = getFarmerById(selectedPremiumFarmerId);
+  const premiumRenterDirectory = getGhanaRenterDirectory();
+  const hasPremiumAccess = Boolean(selectedPremiumSubscription);
+  const hasPrioritySupport = hasPremiumAccess && String(selectedPremiumSubscription.plan).toLowerCase() === 'yearly';
 
   return (
     <div
@@ -1634,6 +1712,97 @@ function App() {
           </div>
         ) : (
           <div style={{ color: '#777' }}>No paid seller profiles yet.</div>
+        )}
+      </section>
+
+      {/* ── Premium seller access hub ── */}
+      <section style={{ marginBottom: 14, background: 'rgba(255,255,255,0.97)', borderRadius: 14, padding: 16, border: '1px solid #ddd' }}>
+        <h2 style={{ marginTop: 0 }}>⭐ Premium seller access</h2>
+        <p style={{ marginTop: 0, color: '#555', fontSize: '0.88rem' }}>Enter the same farmer number you used for subscription to unlock the Ghana-wide renter directory. Yearly sellers also get priority support.</p>
+
+        {!hasPremiumAccess ? (
+          <div style={{ color: '#777' }}>Add a paid farmer number above to unlock this section.</div>
+        ) : (
+          <div className="grid-2">
+            <div style={{ border: '1px solid #e0e0e0', borderRadius: 12, padding: 14, background: '#f7fbff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem' }}>🌍 Ghana-wide renter directory</div>
+                  <div style={{ fontSize: '0.86rem', color: '#555' }}>{premiumRenterDirectory.length} registered farmers available across all districts</div>
+                </div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, padding: '4px 8px', borderRadius: 999, background: '#e8f5e9', color: '#2e7d32' }}>
+                  {getSellerLabel(selectedPremiumFarmerId)}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, display: 'grid', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                {premiumRenterDirectory.slice(0, 12).map(farmer => (
+                  <div key={farmer.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.95)', border: '1px solid #ececec' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{farmer.name}</div>
+                        <div style={{ fontSize: '0.84rem', color: '#555' }}>📍 {farmer.district}</div>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#1769aa', fontWeight: 700 }}>{getFarmerListingCount(farmer.id)} listings</div>
+                    </div>
+                    <div style={{ fontSize: '0.84rem', color: '#555', marginTop: 4 }}>📞 {maskPhone(farmer.phone)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid #e0e0e0', borderRadius: 12, padding: 14, background: hasPrioritySupport ? '#fff8e1' : '#fafafa' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem' }}>🛟 Priority customer support</div>
+                  <div style={{ fontSize: '0.86rem', color: '#555' }}>Yearly sellers get a priority inbox that stays with their farmer number.</div>
+                </div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, padding: '4px 8px', borderRadius: 999, background: hasPrioritySupport ? '#fff3cd' : '#eceff1', color: hasPrioritySupport ? '#8a5b00' : '#666' }}>
+                  {hasPrioritySupport ? 'Priority unlocked' : 'Yearly only'}
+                </div>
+              </div>
+
+              {hasPrioritySupport ? (
+                <>
+                  <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                    <label>
+                      Farmer name<br />
+                      <input value={supportForm.farmer_name || selectedPremiumFarmer?.name || ''} onChange={e => setSupportForm(f => ({ ...f, farmer_name: e.target.value }))} placeholder="Your name" />
+                    </label>
+                    <label>
+                      Phone number<br />
+                      <input value={supportForm.phone || selectedPremiumFarmer?.phone || ''} onChange={e => setSupportForm(f => ({ ...f, phone: e.target.value }))} placeholder="e.g. 0241234567" />
+                    </label>
+                    <label>
+                      Subject<br />
+                      <input value={supportForm.subject} onChange={e => setSupportForm(f => ({ ...f, subject: e.target.value }))} placeholder="Billing, listing, payout, or access issue" />
+                    </label>
+                    <label>
+                      Message<br />
+                      <textarea rows={4} value={supportForm.message} onChange={e => setSupportForm(f => ({ ...f, message: e.target.value }))} placeholder="Tell us what you need help with" />
+                    </label>
+                  </div>
+
+                  <button type="button" onClick={submitPrioritySupportTicket} disabled={isLoadingSupport} className={isLoadingSupport ? 'loading' : ''} style={{ marginTop: 10 }}>
+                    {isLoadingSupport ? <><span className="spinner"></span>(loading)</> : 'Send priority support request'}
+                  </button>
+
+                  <div style={{ marginTop: 14, borderTop: '1px solid #ececec', paddingTop: 12 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Recent support tickets</div>
+                    {supportTickets.length > 0 ? supportTickets.map(ticket => (
+                      <div key={ticket.id} style={{ border: '1px solid #ececec', borderRadius: 8, padding: 10, marginBottom: 8, background: 'rgba(255,255,255,0.9)' }}>
+                        <div style={{ fontWeight: 600 }}>{ticket.subject}</div>
+                        <div style={{ fontSize: '0.84rem', color: '#555' }}>Status: {ticket.status} · Priority: {ticket.priority_level}</div>
+                        <div style={{ fontSize: '0.82rem', color: '#777', marginTop: 4 }}>{ticket.message}</div>
+                      </div>
+                    )) : <div style={{ color: '#777', fontSize: '0.86rem' }}>No support requests yet.</div>}
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: '#777', marginTop: 10 }}>Upgrade to yearly to unlock priority support and the support inbox.</div>
+              )}
+            </div>
+          </div>
         )}
       </section>
 

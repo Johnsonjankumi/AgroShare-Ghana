@@ -186,6 +186,19 @@ class ChatMessage(Base):
     message = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, index=True)
+    farmer_name = Column(String)
+    phone = Column(String)
+    subject = Column(String)
+    message = Column(Text)
+    priority_level = Column(String, default="standard")
+    status = Column(String, default="open")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 ensure_legacy_schema_compatibility()
